@@ -20,3 +20,5 @@ Thumbs.db
 # log build lokal
 build.log
 .kotlin/
+shot*.png
+hp-*.png
