@@ -20,7 +20,7 @@ Aplikasi keuangan pribadi untuk Android — catat pengeluaran, grafik tren, dan 
 
 ## Aturan desain
 
-Sumber kebenaran tampilan ada di [`DESIGN.md`](DESIGN.md); mock acuan di `design/konsep-buku-tabungan-v3.html`.
+Sumber kebenaran tampilan ada di [`DESIGN.md`](DESIGN.md); mock acuan di `design/konsep-buku-tabungan-v4.html` (render: `design/konsep-beranda-v4.png`).
 
 ## Build
 

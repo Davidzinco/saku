@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Saku — Buku Tabungan · v4 (V1.2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,300..600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#E4E7E0}
+  body{font-family:'Archivo',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;padding:26px}
+  .stage{display:flex;gap:26px;align-items:flex-start}
+
+  .col{display:flex;flex-direction:column;gap:9px}
+  .cap{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#6C7A70}
+  .cap b{color:#1B2721}
+
+  /* phone */
+  .phone{width:390px;height:844px;border-radius:34px;overflow:hidden;position:relative;
+         border:1px solid rgba(0,0,0,.10);box-shadow:0 22px 54px -20px rgba(20,30,24,.32),0 2px 6px rgba(20,30,24,.08)}
+  .screen{position:absolute;inset:0;padding:0 24px;display:flex;flex-direction:column}
+  .lt{--paper:#ECEFE7;--sheet:#F7F8F3;--ink:#1B2721;--ink2:#5C6A62;--ink3:#5F6B62;--hair:rgba(27,39,33,.10);
+      --hairSoft:rgba(27,39,33,.06);--accent:#23418F;--wash:rgba(35,65,143,.07);--pos:#39704F;--err:#A33A2B;
+      --bar:#CDD6CA;--c1:#24332B;--c2:#71806F;--c3:#A9B4A7;--c4:#D3DAD0;background:var(--paper);color:var(--ink)}
+  .dk{--paper:#131313;--sheet:#1D1D1C;--ink:#EAEAE7;--ink2:#A0A09D;--ink3:#8C8C89;--hair:rgba(234,234,231,.12);
+      --hairSoft:rgba(234,234,231,.07);--accent:#8C8C8A;--wash:rgba(140,140,138,.14);--pos:#7FBE99;--err:#E38A7A;
+      --bar:#2A2A29;--c1:#EAEAE7;--c2:#A8A8A4;--c3:#6E6E6B;--c4:#3D3D3B;background:var(--paper);color:var(--ink)}
+
+  .status{display:flex;justify-content:space-between;align-items:center;height:36px;font-size:11.5px;font-weight:600}
+  .bat{width:20px;height:10px;border:1.2px solid var(--ink2);border-radius:3px;position:relative}
+  .bat::after{content:'';position:absolute;left:1.4px;top:1.4px;bottom:1.4px;width:12px;background:var(--ink2);border-radius:1.4px}
+
+  .head{display:flex;justify-content:space-between;align-items:center;padding:2px 0 0}
+  .wordmark{font-size:13px;font-weight:700;letter-spacing:.22em}
+  .page{font-size:10.5px;font-weight:500;color:var(--ink3);letter-spacing:.04em}
+  .label{font-size:11.5px;font-weight:500;color:var(--ink3)}
+
+  .saldo{padding:12px 0 11px}
+  .amount{display:flex;align-items:baseline;gap:9px;margin-top:3px}
+  .amount .cur{font-size:16px;font-weight:500;color:var(--ink3)}
+  .amount .val{font-family:'Newsreader',Georgia,serif;font-weight:400;font-size:43px;line-height:1.06;
+               letter-spacing:-.018em;font-variant-numeric:lining-nums tabular-nums;white-space:nowrap}
+  .split{display:flex;gap:26px;margin-top:10px}
+  .split .v{font-size:14.5px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:2px}
+  .split .v.pos{color:var(--pos)}
+  .split .v.neg{color:var(--err)}
+
+  .chart{padding:2px 0 10px;border-top:1px solid var(--hairSoft)}
+  .chart-head{display:flex;align-items:center;justify-content:space-between;margin:7px 0 8px}
+  .nav{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--ink2);background:var(--hairSoft)}
+  .month{font-size:12.5px;font-weight:600}
+  .bars{display:flex;align-items:flex-end;gap:4px;height:46px}
+  .bar{flex:1;height:100%;display:flex;align-items:flex-end;justify-content:center}
+  .fill{width:14px;border-radius:4px 4px 2px 2px;background:var(--bar)}
+  .bar.on .fill{background:var(--accent)}
+  .axis{display:flex;gap:4px;margin-top:6px}
+  .axis span{flex:1;text-align:center;font-size:10px;font-weight:500;color:var(--ink3)}
+  .axis span.on{color:var(--ink);font-weight:600}
+  .caption{margin-top:6px;font-size:10.5px;color:var(--ink3)}
+  .caption b{font-weight:600;color:var(--ink2);font-variant-numeric:tabular-nums}
+
+  .line{margin-top:2px}
+  .line svg{display:block;width:100%;height:46px;overflow:visible}
+
+  .cat{padding:10px 0;border-top:1px solid var(--hairSoft)}
+  .sect{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px}
+  .sect .t{font-size:12.5px;font-weight:600}
+  .sect .n{font-size:10.5px;color:var(--ink3)}
+  .stack{display:flex;gap:2px;height:6px;margin-bottom:9px}
+  .stack i{display:block;border-radius:3px}
+  .legend{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
+  .li{display:flex;align-items:center;gap:7px;min-width:0}
+  .li .sw{width:6px;height:6px;border-radius:2px;flex:none}
+  .li .nm{font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+  .li .am{font-size:11px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+
+  .nabung{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--hairSoft)}
+  .nabung .ic{width:26px;height:26px;border-radius:9px;background:var(--wash);color:var(--accent);display:grid;place-items:center;flex:none}
+  .nabung .ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .nabung .top{display:flex;justify-content:space-between;align-items:baseline}
+  .nabung .nm{font-size:11.5px;font-weight:600}
+  .nabung .am{font-size:11px;color:var(--ink2);font-variant-numeric:tabular-nums}
+  .track{height:4px;border-radius:2px;background:var(--hair);margin-top:6px;overflow:hidden}
+  .track i{display:block;height:100%;border-radius:2px;background:var(--pos);width:32%}
+
+  .cols{display:grid;grid-template-columns:40px 1fr 82px 76px;gap:10px;padding:6px 0;
+        font-size:9px;font-weight:600;letter-spacing:.08em;color:var(--ink3);text-transform:uppercase;
+        border-bottom:1px solid var(--hair);white-space:nowrap}
+  .cols span:nth-child(3),.cols span:nth-child(4){text-align:right}
+  .row{display:grid;grid-template-columns:40px 1fr 82px 76px;gap:10px;align-items:center;height:49px;
+       border-bottom:1px solid var(--hairSoft)}
+  .d{font-size:11px;font-weight:500;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .ket{min-width:0}
+  .ket .note{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ket .meta{display:flex;align-items:center;gap:8px;margin-top:2px;font-size:10.5px;color:var(--ink3)}
+  .dotm{width:2.5px;height:2.5px;border-radius:50%;background:var(--ink3);opacity:.55;flex:none}
+  .jml{font-size:13.5px;font-weight:500;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--err)}
+  .jml.pos{color:var(--pos)}
+  .sal{font-size:11px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink3);margin-top:0;white-space:nowrap}
+  .row.new .sal{color:var(--accent);font-weight:600}
+  .row.flash{background:rgba(140,140,138,.10)}
+
+  .dock{position:absolute;left:22px;right:22px;bottom:24px;height:66px;background:var(--sheet);border-radius:21px;
+        display:grid;grid-template-columns:1fr 1fr 58px 1fr 1fr;align-items:center;
+        box-shadow:0 10px 28px -8px rgba(20,30,24,.28),0 1px 2px rgba(20,30,24,.08);border:1px solid var(--hairSoft)}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:9.5px;font-weight:500;color:var(--ink3);
+       position:relative;height:66px;justify-content:center}
+  .tab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .tab.on{color:var(--accent);font-weight:600}
+  .tab.on::before{content:'';position:absolute;inset:11px 8px;background:var(--wash);border-radius:14px;z-index:-1}
+  .fab{width:54px;height:54px;border-radius:50%;background:var(--accent);color:var(--paper);display:grid;place-items:center;
+       font-size:26px;font-weight:300;line-height:1;margin-top:-21px;box-shadow:0 8px 18px -4px rgba(20,30,24,.45)}
+
+  /* sheet frame */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sheet);border-radius:22px 22px 0 0;
+         border:1px solid var(--hairSoft);padding:12px 24px 0;display:flex;flex-direction:column}
+  .handle{width:38px;height:4px;border-radius:2px;background:var(--hair);margin:0 auto 14px}
+  .sheet h3{font-size:19px;font-weight:600;line-height:1.3}
+  .seg{display:flex;gap:8px;margin-top:14px}
+  .seg div{flex:1;height:44px;border:1px solid var(--hair);border-radius:10px;display:grid;place-items:center;
+           font-size:11.5px;font-weight:500;color:var(--ink2)}
+  .seg div.on{border-color:var(--ink);color:var(--ink);font-weight:600}
+  .field{height:48px;border:1px solid var(--hair);border-radius:10px;background:var(--paper);display:flex;align-items:center;
+         padding:0 12px;gap:8px;font-size:14px}
+  .field.big{height:68px}
+  .field .ph{color:var(--ink3)}
+  .field .money{font-family:'Newsreader',Georgia,serif;font-size:32px;letter-spacing:-.015em;font-variant-numeric:tabular-nums}
+  .chips{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .chip{height:38px;border:1px solid var(--hair);border-radius:10px;display:flex;align-items:center;gap:6px;padding:0 8px;
+        font-size:11.5px;color:var(--ink2);font-weight:500}
+  .chip.on{border-color:var(--ink);color:var(--ink);font-weight:600}
+  .chip svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .tpick{border:1px solid var(--hair);border-radius:10px;background:var(--paper);padding:8px 12px}
+  .tpick .big{display:flex;align-items:baseline;gap:4px;font-family:'Newsreader',Georgia,serif;font-size:32px;
+              letter-spacing:-.015em;font-variant-numeric:tabular-nums}
+  .tpick .when{margin-left:auto;font-size:10.5px;color:var(--ink3)}
+  .tpick .scr{display:flex;align-items:center;gap:8px;margin-top:2px}
+  .tpick .scr span{width:44px;font-size:10.5px;color:var(--ink3)}
+  .tpick .track2{position:relative;flex:1;height:44px;display:flex;align-items:center}
+  .tpick .base{position:absolute;left:0;right:0;height:3px;border-radius:2px;background:var(--hair)}
+  .tpick .fill2{position:absolute;left:0;height:3px;border-radius:2px;background:var(--accent)}
+  .tpick .knob{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--sheet);
+               border:2px solid var(--accent);transform:translateX(-9px)}
+  .footer{margin-top:auto;border-top:1px solid var(--hairSoft);padding:12px 0 20px}
+  .btn{height:48px;border-radius:24px;background:var(--accent);color:var(--paper);display:grid;place-items:center;
+       font-size:14px;font-weight:600}
+
+  /* side panel */
+  .side{width:236px;display:flex;flex-direction:column;gap:20px;padding-top:24px}
+  .side h2{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#6C7A70;margin-bottom:8px}
+  .sw{display:flex;align-items:center;gap:10px;font-size:11.5px;color:#1B2721;padding:3px 0}
+  .sw i{width:20px;height:20px;border-radius:6px;flex:none;box-shadow:inset 0 0 0 1px rgba(27,39,33,.10)}
+  .sw code{font-family:'Archivo',sans-serif;font-size:10px;color:#7A8880;font-variant-numeric:tabular-nums}
+  .note{font-size:11.5px;line-height:1.6;color:#4C5A52}
+  .note b{color:#1B2721;font-weight:600}
+  .pal{display:flex;gap:8px;flex-wrap:wrap}
+  .pal div{width:44px;height:44px;border-radius:10px;box-shadow:inset 0 0 0 1px rgba(27,39,33,.12);position:relative}
+  .pal div span{position:absolute;left:0;right:0;bottom:-15px;text-align:center;font-size:8px;color:#6C7A70}
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <!-- 1. HOME terang, grafik batang 12 bulan -->
+  <div class="col">
+    <div class="cap">01 · <b>Home</b> · Kertas · batang · 12 bulan</div>
+    <div class="phone lt">
+      <div class="screen">
+        <div class="status"><span>9.41</span><span class="bat"></span></div>
+        <div class="head"><span class="wordmark">SAKU</span><span class="page">Lembar 11 / 2026</span></div>
+
+        <div class="saldo">
+          <div class="label">Saldo akhir</div>
+          <div class="amount"><span class="cur">Rp</span><span class="val">12.524.004</span></div>
+          <div class="split">
+            <div><div class="label">Masuk</div><div class="v pos">+6.500.000</div></div>
+            <div><div class="label">Keluar</div><div class="v neg">−2.388.000</div></div>
+            <div><div class="label">Selisih</div><div class="v pos">+4.112.000</div></div>
+          </div>
+        </div>
+
+        <div class="chart">
+          <div class="chart-head"><span class="nav"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M10 3 5 8l5 5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            <span class="month">November 2026</span>
+            <span class="nav"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3l5 5-5 5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/></svg></span></div>
+          <div class="bars">
+            <div class="bar"><div class="fill" style="height:2%"></div></div>
+            <div class="bar"><div class="fill" style="height:2%"></div></div>
+            <div class="bar"><div class="fill" style="height:2%"></div></div>
+            <div class="bar"><div class="fill" style="height:2%"></div></div>
+            <div class="bar"><div class="fill" style="height:2%"></div></div>
+            <div class="bar"><div class="fill" style="height:60%"></div></div>
+            <div class="bar"><div class="fill" style="height:54%"></div></div>
+            <div class="bar"><div class="fill" style="height:68%"></div></div>
+            <div class="bar"><div class="fill" style="height:61%"></div></div>
+            <div class="bar"><div class="fill" style="height:100%"></div></div>
+            <div class="bar on"><div class="fill" style="height:38%"></div></div>
+            <div class="bar"><div class="fill" style="height:2%"></div></div>
+          </div>
+          <div class="axis"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>Mei</span><span>Jun</span><span>Jul</span><span>Agu</span><span>Sep</span><span>Okt</span><span class="on">Nov</span><span>Des</span></div>
+          <div class="caption">Tertinggi Oktober, <b>Rp 6.246.596</b></div>
+        </div>
+
+        <div class="cat">
+          <div class="sect"><span class="t">Spending per kategori</span><span class="n">4 dari 5 kategori</span></div>
+          <div class="stack">
+            <i style="background:var(--c1);flex:2500"></i><i style="background:var(--c2);flex:1800"></i>
+            <i style="background:var(--c3);flex:450"></i><i style="background:var(--c4);flex:182"></i>
+          </div>
+          <div class="legend">
+            <div class="li"><span class="sw" style="background:var(--c1)"></span><span class="nm">Nabung</span><span class="am">2.500.000</span></div>
+            <div class="li"><span class="sw" style="background:var(--c2)"></span><span class="nm">Tagihan</span><span class="am">1.800.000</span></div>
+            <div class="li"><span class="sw" style="background:var(--c3)"></span><span class="nm">Belanja</span><span class="am">450.000</span></div>
+            <div class="li"><span class="sw" style="background:var(--c4)"></span><span class="nm">Makan</span><span class="am">182.000</span></div>
+          </div>
+        </div>
+
+        <div class="nabung">
+          <span class="ic"><svg viewBox="0 0 20 20"><rect x="2.6" y="6" width="14.8" height="9.4" rx="2"/><path d="M2.6 9.4h14.8"/><path d="M6 6V4.6h8V6"/></svg></span>
+          <div style="flex:1;min-width:0">
+            <div class="top"><span class="nm">Dana darurat</span><span class="am">3.200.000 / 10.000.000</span></div>
+            <div class="track"><i></i></div>
+          </div>
+        </div>
+
+        <div class="sect" style="margin-top:2px"><span class="t">Transaksi</span><span class="n">7 transaksi</span></div>
+        <div class="cols"><span>Tgl</span><span>Keterangan</span><span>Jumlah</span><span>Saldo</span></div>
+        <div class="row new"><div class="d">15/11</div><div class="ket"><div class="note">Kopi &amp; jajan</div><div class="meta">Makan <span class="dotm"></span> 15:45</div></div><div class="jml">−26.000</div><div class="sal">12.524.004</div></div>
+        <div class="row"><div class="d">13/11</div><div class="ket"><div class="note">Belanja bulanan</div><div class="meta">Belanja <span class="dotm"></span> 16:10</div></div><div class="jml">−450.000</div><div class="sal">12.550.004</div></div>
+        <div class="row"><div class="d">11/11</div><div class="ket"><div class="note">Kos</div><div class="meta">Tagihan <span class="dotm"></span> 09:15</div></div><div class="jml">−1.800.000</div><div class="sal">13.000.004</div></div>
+        <div class="row"><div class="d">09/11</div><div class="ket"><div class="note">Ojek &amp; bensin</div><div class="meta">Transport <span class="dotm"></span> 07:20</div></div><div class="jml">−112.000</div><div class="sal">14.800.004</div></div>
+
+        <div class="dock">
+          <div class="tab on"><svg viewBox="0 0 20 20"><path d="M3 8.4 10 3l7 5.4V16a1 1 0 0 1-1 1h-4v-5H8v5H4a1 1 0 0 1-1-1V8.4Z"/></svg>Home</div>
+          <div class="tab"><svg viewBox="0 0 20 20"><path d="M5 3h10v14l-2-1.4-1.7 1.4L10 15.6 8.3 17 6.6 15.6 5 17V3Z"/><path d="M7.6 7h4.8M7.6 10.4h4.8"/></svg>Transaksi</div>
+          <div class="fab">+</div>
+          <div class="tab"><svg viewBox="0 0 20 20"><rect x="2.6" y="6" width="14.8" height="9.4" rx="2"/><path d="M2.6 9.4h14.8"/><path d="M6 6V4.6h8V6"/></svg>Nabung</div>
+          <div class="tab"><svg viewBox="0 0 20 20"><path d="M3 6h14M3 10h14M3 14h14"/><circle cx="7" cy="6" r="1.7" fill="var(--sheet)"/><circle cx="13" cy="10" r="1.7" fill="var(--sheet)"/><circle cx="8.6" cy="14" r="1.7" fill="var(--sheet)"/></svg>Setting</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. HOME gelap monokrom, grafik garis -->
+  <div class="col">
+    <div class="cap">02 · <b>Home</b> · Monokrom gelap (default) · garis</div>
+    <div class="phone dk">
+      <div class="screen">
+        <div class="status"><span>9.41</span><span class="bat"></span></div>
+        <div class="head"><span class="wordmark">SAKU</span><span class="page">Lembar 11 / 2026</span></div>
+
+        <div class="saldo">
+          <div class="label">Saldo akhir</div>
+          <div class="amount"><span class="cur">Rp</span><span class="val">12.524.004</span></div>
+          <div class="split">
+            <div><div class="label">Masuk</div><div class="v pos">+6.500.000</div></div>
+            <div><div class="label">Keluar</div><div class="v neg">−2.388.000</div></div>
+            <div><div class="label">Selisih</div><div class="v pos">+4.112.000</div></div>
+          </div>
+        </div>
+
+        <div class="chart">
+          <div class="chart-head"><span class="nav"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M10 3 5 8l5 5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            <span class="month">November 2026</span>
+            <span class="nav"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3l5 5-5 5" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round"/></svg></span></div>
+          <div class="line">
+            <svg viewBox="0 0 342 46" preserveAspectRatio="none">
+              <line x1="0" y1="45.5" x2="342" y2="45.5" stroke="rgba(234,234,231,.12)" stroke-width="1"/>
+              <polyline points="0,44 31,44 62,44 93,44 124,44 155,20.2 186,22.3 217,16.6 248,19.5 279,4 310,28.7 342,44"
+                        fill="none" stroke="#A0A09D" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <g fill="#131313" stroke="#A0A09D" stroke-width="1.2">
+                <circle cx="0" cy="44" r="2.6"/><circle cx="31" cy="44" r="2.6"/><circle cx="62" cy="44" r="2.6"/>
+                <circle cx="93" cy="44" r="2.6"/><circle cx="124" cy="44" r="2.6"/><circle cx="155" cy="20.2" r="2.6"/>
+                <circle cx="186" cy="22.3" r="2.6"/><circle cx="217" cy="16.6" r="2.6"/><circle cx="248" cy="19.5" r="2.6"/>
+                <circle cx="279" cy="4" r="2.6"/><circle cx="342" cy="44" r="2.6"/>
+              </g>
+              <circle cx="310" cy="28.7" r="4" fill="#8C8C8A"/>
+              <circle cx="310" cy="28.7" r="1.8" fill="#1D1D1C"/>
+            </svg>
+          </div>
+          <div class="axis"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>Mei</span><span>Jun</span><span>Jul</span><span>Agu</span><span>Sep</span><span>Okt</span><span class="on">Nov</span><span>Des</span></div>
+          <div class="caption">Tertinggi Oktober, <b>Rp 6.246.596</b></div>
+        </div>
+
+        <div class="cat">
+          <div class="sect"><span class="t">Spending per kategori</span><span class="n">4 dari 5 kategori</span></div>
+          <div class="stack">
+            <i style="background:var(--c1);flex:2500"></i><i style="background:var(--c2);flex:1800"></i>
+            <i style="background:var(--c3);flex:450"></i><i style="background:var(--c4);flex:182"></i>
+          </div>
+          <div class="legend">
+            <div class="li"><span class="sw" style="background:var(--c1)"></span><span class="nm">Nabung</span><span class="am">2.500.000</span></div>
+            <div class="li"><span class="sw" style="background:var(--c2)"></span><span class="nm">Tagihan</span><span class="am">1.800.000</span></div>
+            <div class="li"><span class="sw" style="background:var(--c3)"></span><span class="nm">Belanja</span><span class="am">450.000</span></div>
+            <div class="li"><span class="sw" style="background:var(--c4)"></span><span class="nm">Makan</span><span class="am">182.000</span></div>
+          </div>
+        </div>
+
+        <div class="nabung">
+          <span class="ic"><svg viewBox="0 0 20 20"><rect x="2.6" y="6" width="14.8" height="9.4" rx="2"/><path d="M2.6 9.4h14.8"/><path d="M6 6V4.6h8V6"/></svg></span>
+          <div style="flex:1;min-width:0">
+            <div class="top"><span class="nm">Dana darurat</span><span class="am">3.200.000 / 10.000.000</span></div>
+            <div class="track"><i></i></div>
+          </div>
+        </div>
+
+        <div class="sect" style="margin-top:2px"><span class="t">Transaksi</span><span class="n">7 transaksi</span></div>
+        <div class="cols"><span>Tgl</span><span>Keterangan</span><span>Jumlah</span><span>Saldo</span></div>
+        <div class="row new flash"><div class="d">15/11</div><div class="ket"><div class="note">Kopi &amp; jajan</div><div class="meta">Makan <span class="dotm"></span> 15:45</div></div><div class="jml">−26.000</div><div class="sal">12.524.004</div></div>
+        <div class="row"><div class="d">13/11</div><div class="ket"><div class="note">Belanja bulanan</div><div class="meta">Belanja <span class="dotm"></span> 16:10</div></div><div class="jml">−450.000</div><div class="sal">12.550.004</div></div>
+        <div class="row"><div class="d">11/11</div><div class="ket"><div class="note">Kos</div><div class="meta">Tagihan <span class="dotm"></span> 09:15</div></div><div class="jml">−1.800.000</div><div class="sal">13.000.004</div></div>
+        <div class="row"><div class="d">07/11</div><div class="ket"><div class="note">Setor · Laptop baru</div><div class="meta">Nabung <span class="dotm"></span> 19:30</div></div><div class="jml">−1.500.000</div><div class="sal">14.800.004</div></div>
+
+        <div class="dock">
+          <div class="tab on"><svg viewBox="0 0 20 20"><path d="M3 8.4 10 3l7 5.4V16a1 1 0 0 1-1 1h-4v-5H8v5H4a1 1 0 0 1-1-1V8.4Z"/></svg>Home</div>
+          <div class="tab"><svg viewBox="0 0 20 20"><path d="M5 3h10v14l-2-1.4-1.7 1.4L10 15.6 8.3 17 6.6 15.6 5 17V3Z"/><path d="M7.6 7h4.8M7.6 10.4h4.8"/></svg>Transaksi</div>
+          <div class="fab">+</div>
+          <div class="tab"><svg viewBox="0 0 20 20"><rect x="2.6" y="6" width="14.8" height="9.4" rx="2"/><path d="M2.6 9.4h14.8"/><path d="M6 6V4.6h8V6"/></svg>Nabung</div>
+          <div class="tab"><svg viewBox="0 0 20 20"><path d="M3 6h14M3 10h14M3 14h14"/><circle cx="7" cy="6" r="1.7" fill="var(--sheet)"/><circle cx="13" cy="10" r="1.7" fill="var(--sheet)"/><circle cx="8.6" cy="14" r="1.7" fill="var(--sheet)"/></svg>Setting</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. SHEET catat transaksi -->
+  <div class="col">
+    <div class="cap">03 · <b>Sheet</b> · Date + Time picker · footer sticky</div>
+    <div class="phone dk">
+      <div class="screen">
+        <div class="status"><span>9.41</span><span class="bat"></span></div>
+        <div class="scrim"></div>
+        <div class="sheet" style="top:118px">
+          <div class="handle"></div>
+          <h3>Catat transaksi</h3>
+          <div class="seg"><div class="on">Keluar</div><div>Masuk</div></div>
+
+          <div class="label" style="margin:14px 0 6px">Nominal</div>
+          <div class="field big"><span class="ph">Rp</span><span class="money">185.000</span></div>
+
+          <div class="label" style="margin:12px 0 8px">Category</div>
+          <div class="chips">
+            <div class="chip on"><svg viewBox="0 0 20 20"><path d="M2.6 9.6h14.8"/><path d="M3.4 9.6a6.6 6.6 0 0 0 13.2 0"/></svg>Makan</div>
+            <div class="chip"><svg viewBox="0 0 20 20"><rect x="3" y="8.6" width="14" height="5.2" rx="1.6"/><circle cx="6.6" cy="15" r="1.4"/><circle cx="13.4" cy="15" r="1.4"/></svg>Transport</div>
+            <div class="chip"><svg viewBox="0 0 20 20"><path d="M3 8.6 10 3l7 5.6V16H3z"/></svg>Tagihan</div>
+            <div class="chip"><svg viewBox="0 0 20 20"><path d="M5.4 7h9.2l.6 9.6H4.8z"/><path d="M7.4 7V5.6a2.6 2.6 0 0 1 5.2 0V7"/></svg>Belanja</div>
+            <div class="chip"><svg viewBox="0 0 20 20"><rect x="3" y="5.4" width="14" height="9.2" rx="1.6"/><path d="M7.6 5.4v9.2M12.4 5.4v9.2"/></svg>Hiburan</div>
+            <div class="chip"><svg viewBox="0 0 20 20"><rect x="2.6" y="6" width="14.8" height="9.4" rx="2"/><path d="M2.6 9.4h14.8"/></svg>Nabung</div>
+          </div>
+
+          <div class="label" style="margin:12px 0 6px">Note</div>
+          <div class="field"><span>Makan siang</span></div>
+
+          <div class="label" style="margin:12px 0 6px">Date</div>
+          <div class="field"><span>Hari ini · 16/11</span><span style="margin-left:auto;color:var(--ink3)">▾</span></div>
+
+          <div class="label" style="margin:12px 0 6px">Time</div>
+          <div class="tpick">
+            <div class="big"><span>09</span><span style="color:var(--ink3)">:</span><span>41</span><span class="when">pagi</span></div>
+            <div class="scr"><span>Jam</span>
+              <div class="track2"><div class="base"></div><div class="fill2" style="width:39%"></div><div class="knob" style="left:39%"></div></div>
+            </div>
+            <div class="scr"><span>Menit</span>
+              <div class="track2"><div class="base"></div><div class="fill2" style="width:69%"></div><div class="knob" style="left:69%"></div></div>
+            </div>
+          </div>
+
+          <div class="footer"><div class="btn">Simpan transaksi</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- panel -->
+  <div class="side">
+    <div>
+      <h2>Default V1.2</h2>
+      <div class="sw"><i style="background:#131313"></i><span>kertas <code>#131313</code></span></div>
+      <div class="sw"><i style="background:#1D1D1C"></i><span>lembar <code>#1D1D1C</code></span></div>
+      <div class="sw"><i style="background:#EAEAE7"></i><span>tinta <code>#EAEAE7</code></span></div>
+      <div class="sw"><i style="background:#8C8C8A"></i><span>cap <code>#8C8C8A</code></span></div>
+      <div class="sw"><i style="background:#E38A7A"></i><span>keluar <code>#E38A7A</code></span></div>
+    </div>
+    <div>
+      <h2>Palet</h2>
+      <div class="pal">
+        <div style="background:#1B2721"><span>Kertas</span></div>
+        <div style="background:#A8542F"><span>Krem</span></div>
+        <div style="background:#2C5D8A"><span>Baja</span></div>
+        <div style="background:#2F6B4F"><span>Hutan</span></div>
+        <div style="background:#5B4BA8"><span>Ungu</span></div>
+        <div style="background:#3A3A38"><span>Mono</span></div>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <h2>V1.2</h2>
+      <div class="note">
+        <b>Grafik</b> batang atau garis, 6/12 bulan, bisa diketuk dan digeser.<br><br>
+        <b>Navigasi</b> geser halaman untuk pindah tab; dock tetap sinkron.<br><br>
+        <b>Sheet</b> nominal berformat ribuan, Date, Time picker geser, footer sticky.<br><br>
+        <b>Nabung</b> setoran = transaksi, jadi saldo akhir selalu sinkron.<br><br>
+        <b>Setting</b> folder Theme, Category, Chart, Data.
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 Arah desain untuk aplikasi Android **Saku** (Kotlin + Jetpack Compose). Dokumen ini adalah sumber kebenaran: kalau kode menyimpang dari sini, dokumen ini yang menang.
 
-Mock acuan (HTML, bukan kode produksi): `design/konsep-buku-tabungan-v3.html` → render `design/konsep-beranda-v3.png`. Nilai px di mock = dp di Compose pada lebar 390dp.
+Mock acuan (HTML, bukan kode produksi): `design/konsep-buku-tabungan-v4.html` → render `design/konsep-beranda-v4.png`. Versi lama (v1–v3) disimpan sebagai riwayat arah desain. Nilai px di mock = dp di Compose pada lebar 390dp.
 
 ---
 
@@ -82,6 +82,8 @@ Mock acuan (HTML, bukan kode produksi): `design/konsep-buku-tabungan-v3.html` �
 3. Cap cobalt hanya untuk tiga hal: aksi utama (FAB, tombol simpan), tab aktif, dan saldo baris teratas. Kalau muncul di tempat keempat, hapus.
 4. Tidak ada gradien. Tidak ada glow.
 
+**Palet:** satu nada kertas + satu aksen, dihitung menjadi token lengkap (bg, lembar, tinta, muted, garis rambut, ramp kategori). Palet bawaan: Kertas, Krem & Terakota, Baja, Hutan, Ungu, Monokrom — plus custom (8 aksen × 4 nada kertas). **Default aplikasi: Monokrom + mode gelap.**
+
 **Dark mode (dirancang, bukan inversi):**
 
 | role | hex |
@@ -121,11 +123,26 @@ dock              66dp, bottom 24dp
 ```
 
 - **Urutan section Beranda wajib:** saldo → grafik bulan → kategori → nabung → transaksi. Jangan menambah section tanpa menghapus yang lain; layar ini sudah penuh.
+- **Grafik:** bentuk *batang* atau *garis* (dipilih di Setting › Chart), rentang **6 bulan** (Jan–Jun / Jul–Des) atau **12 bulan** (Jan–Des). Jendela tidak bergeser saat pindah bulan: batang/titik yang tersorot mengikuti bulan yang sedang dilihat, bukan selalu di ujung kanan. Batang bisa diketuk; area grafik bisa digeser kiri-kanan untuk pindah bulan.
 - **Tidak ada layout tengah.** Semua teks rata kiri; semua angka rata kanan pada kolomnya.
 - **Layar lain mengikuti grammar yang sama:** judul layar 19sp di kiri atas, tanpa kartu, daftar dengan garis rambut, angka tabular.
 - **Breakpoint:** 360–430dp saja (portrait). Tidak ada layout tablet atau landscape yang dirancang; di layar lebih lebar, konten tetap 24dp margin, bukan melebar.
 
 ## Komponen dan state
+
+**Navigasi halaman**
+- Empat halaman (Home, Transaksi, Nabung, Setting) hidup di satu pager horizontal. Geser ke kiri/kanan untuk pindah halaman tanpa menyentuh dock; dock selalu menyorot halaman yang sedang tampil.
+- Perpindahan halaman 320ms, transform + opacity saja (`slideInHorizontally` 1/5 lebar + fade).
+
+**Time picker (sheet)**
+- Input jam tidak memakai keyboard: dua track geser (Jam 0–23, Menit 0–59), bisa diketuk atau digeser, dengan angka besar 32sp Newsreader dan penanda `pagi/siang/sore/malam`.
+- Tidak ada keyboard berarti tidak ada inset IME yang menggeser sheet; `imePadding` hanya dipasang di kontainer sheet, bukan di dalam isi.
+
+**Sheet**
+- Nominal: pemisah ribuan muncul saat mengetik (`1.250.000`), angka saja.
+- Urutan field: jenis → Nominal → Category → Note → Date → Time.
+- Footer sticky: aksi utama (dan "Hapus transaksi" saat mengubah) selalu di bawah sheet, tidak ikut tergulir.
+- Tutup: scrim, tombol ×, atau back. Hapus butuh dua ketuk konfirmasi.
 
 **Dock navigasi**
 - 5 slot: Beranda, Transaksi, [+], Nabung, Atur. Tinggi 66dp, radius 22dp, surface + hairline.
@@ -162,6 +179,7 @@ dock              66dp, bottom 24dp
 - Easing: `FastOutSlowIn` untuk masuk, `LinearOutSlowIn` untuk keluar. Tidak ada bounce.
 - Yang dianimasikan: transform dan opacity saja. Jangan animasi `width/height/padding`.
 - Motion tanda tangan: pill dock bergerak dengan spring `dampingRatio 0.82`, `stiffness 650` saat tab berubah, dan snap `0.72 / 900` setelah digeser.
+- V1.2: baris transaksi baru/berubah diberi kilatan `accent` 16% selama 900ms; daftar memudar masuk 240ms saat bulan berganti; angka saldo/masuk/keluar/selisih bergerak 360–420ms; batang grafik tumbuh bertahap 18ms per batang; sheet punya animasi keluar 240ms sebelum dilepas.
 - `prefers-reduced-motion` → durasi 0ms, transisi jadi cross-fade instan.
 
 ## Iconography
@@ -265,4 +283,5 @@ dengan `amount` bertanda (`+` untuk masuk, `−` untuk keluar). Baris pertama se
 
 - **2026-11-16:** versi awal. Arah *Buku Tabungan* dipilih dari tiga kandidat (Buku Tabungan, Struk Kasir, Dompet), dua putaran penyempurnaan (kasar → halus → halus dan padat). Mock acuan: `design/konsep-buku-tabungan-v3.html`.
 - **2026-11-16 (implementasi):** seluruh aplikasi ditulis ulang mengikuti dokumen ini. Kode lama (kertas hitam + lime, dock kaca `backdrop`, ikon Material, chip warna kategori, label ALL CAPS) dihapus. Font Archivo + Newsreader dibundel, ikon digambar sendiri di `Ui.kt`, dock menjadi satu lembar surface + garis rambut, tabel transaksi 4 kolom dengan saldo berjalan, kategori memakai satu ramp tinta. Data contoh dihapus — aplikasi mulai kosong.
+- **2026-11-16 (V1.2 · mock v4):** `design/konsep-buku-tabungan-v4.html` + render `konsep-beranda-v4.png`: tiga frame (Home Kertas batang 12 bulan, Home Monokrom gelap garis, sheet dengan Time picker). Dokumen ini diperbarui untuk pager, Time picker, footer sticky, palet, dan default monokrom gelap.
 - **2026-11-16 (V1.2):** tema default monokrom + mode gelap; pengeluaran berwarna `error`; input nominal berformat ribuan; Date + Time (picker geser, tanpa keyboard); edit/hapus transaksi; grafik Batang/Garis dengan rentang 6/12 bulan, bisa diketuk dan digeser; geser halaman untuk pindah tab; Setting dipecah jadi folder Theme/Category/Chart; ikon aplikasi adaptif.
