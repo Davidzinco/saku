@@ -14,12 +14,15 @@ data class Tx(
     val date: String,      // yyyy-MM-dd
     val time: String,      // HH:mm
     val type: String,      // "in" | "out"
-    val amount: Long,
+    val amount: Long,      // selalu positif
     val cat: String,
     val note: String
-)
+) {
+    val signed: Long get() = if (type == "in") amount else -amount
+}
 
-data class Cat(val id: String, val name: String, val color: Long, val icon: String)
+/** Kategori dibedakan lewat glyph, bukan warna (DESIGN.md § Color aturan 2). */
+data class Cat(val id: String, val name: String, val glyph: String)
 
 data class Goal(val id: String, val name: String, val target: Long, val saved: Long)
 
@@ -27,114 +30,165 @@ data class Saku(
     val tx: List<Tx> = emptyList(),
     val cats: List<Cat> = defaultCats(),
     val goals: List<Goal> = emptyList(),
-    val dark: Boolean = true
+    val dark: Boolean = false
 )
+
+val glyphChoices = listOf("food", "car", "home", "bag", "film", "heart", "money", "dot")
 
 fun defaultCats() = listOf(
-    Cat("makan", "Makan", 0xFFFF7A6B, "restaurant"),
-    Cat("transport", "Transport", 0xFFE0B341, "directions_car"),
-    Cat("tagihan", "Tagihan", 0xFF5FB3E0, "home"),
-    Cat("belanja", "Belanja", 0xFFA98BF5, "shopping_bag"),
-    Cat("hiburan", "Hiburan", 0xFFE07BB0, "movie"),
-    Cat("kesehatan", "Kesehatan", 0xFF57D9C0, "favorite"),
-    Cat("gaji", "Gaji", 0xFF7BE495, "payments"),
-    Cat("lain", "Lainnya", 0xFF8B9499, "more_horiz"),
+    Cat("makan", "Makan", "food"),
+    Cat("transport", "Transport", "car"),
+    Cat("tagihan", "Tagihan", "home"),
+    Cat("belanja", "Belanja", "bag"),
+    Cat("hiburan", "Hiburan", "film"),
+    Cat("kesehatan", "Kesehatan", "heart"),
+    Cat("gaji", "Gaji", "money"),
+    Cat("lain", "Lainnya", "dot")
 )
 
-fun Saku.monthOf(c: Calendar): List<Tx> {
-    val y = c.get(Calendar.YEAR)
-    val m = c.get(Calendar.MONTH)
-    return tx.filter {
-        val d = Fmt.parse(it.date).let { p -> Calendar.getInstance().apply { time = p } }
-        d.get(Calendar.YEAR) == y && d.get(Calendar.MONTH) == m
+fun Saku.monthTxs(c: Calendar): List<Tx> {
+    val prefix = String.format(Locale.US, "%04d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1)
+    return tx.filter { it.date.startsWith(prefix) }
+        .sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time })
+}
+
+fun Saku.income(c: Calendar): Long = monthTxs(c).filter { it.type == "in" }.sumOf { it.amount }
+fun Saku.outcome(c: Calendar): Long = monthTxs(c).filter { it.type == "out" }.sumOf { it.amount }
+fun Saku.balance(): Long = tx.sumOf { it.signed }
+
+/** Saldo di akhir bulan `c` = semua transaksi sampai akhir bulan itu. */
+fun Saku.balanceAtMonthEnd(c: Calendar): Long {
+    val next = (c.clone() as Calendar).apply {
+        set(Calendar.DAY_OF_MONTH, 1)
+        add(Calendar.MONTH, 1)
+    }
+    val key = Fmt.iso(next.time)
+    return tx.filter { it.date < key }.sumOf { it.signed }
+}
+
+/**
+ * Saldo berjalan untuk daftar bulan yang sudah urut terbaru → terlama.
+ * saldoSetelah(i) = saldoAkhirBulan − Σ amount(j) untuk j < i (DESIGN.md § Perhitungan saldo berjalan).
+ */
+fun Saku.runningBalances(c: Calendar, rows: List<Tx>): List<Long> {
+    var acc = balanceAtMonthEnd(c)
+    return rows.map { row ->
+        val here = acc
+        acc -= row.signed
+        here
     }
 }
 
-fun Saku.income(c: Calendar): Long = monthOf(c).filter { it.type == "in" }.sumOf { it.amount }
-fun Saku.outcome(c: Calendar): Long = monthOf(c).filter { it.type == "out" }.sumOf { it.amount }
-fun Saku.balance(): Long = tx.sumOf { if (it.type == "in") it.amount else -it.amount }
+/** Pengeluaran bulan `c` per kategori, terbesar dulu. */
+fun Saku.spendingByCat(c: Calendar): List<Pair<Cat, Long>> = monthTxs(c)
+    .filter { it.type == "out" }
+    .groupBy { it.cat }
+    .map { (id, list) -> (catOf(id) ?: Cat(id, "Lainnya", "dot")) to list.sumOf { it.amount } }
+    .filter { it.second > 0 }
+    .sortedByDescending { it.second }
 
-/** total pengeluaran n bulan terakhir, urut lama -> baru */
-fun Saku.trend(n: Int): List<Pair<Calendar, Long>> {
+/** Total pengeluaran n bulan terakhir yang berakhir di bulan `cursor`, urut lama → baru. */
+fun Saku.trend(n: Int, cursor: Calendar): List<Pair<Calendar, Long>> {
     val out = mutableListOf<Pair<Calendar, Long>>()
     for (k in n - 1 downTo 0) {
-        val c = Calendar.getInstance()
-        c.add(Calendar.MONTH, -k)
+        val c = (cursor.clone() as Calendar).apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            add(Calendar.MONTH, -k)
+        }
         out += c to outcome(c)
     }
     return out
 }
 
 fun Saku.catOf(id: String): Cat? = cats.firstOrNull { it.id == id }
+fun Saku.countFor(catId: String): Int = tx.count { it.cat == catId }
 
 object Fmt {
-    private val nf: NumberFormat = NumberFormat.getNumberInstance(Locale("in", "ID"))
+    private val ID: Locale = Locale.forLanguageTag("id-ID")
+    private val nf: NumberFormat = NumberFormat.getIntegerInstance(ID)
     private val raw = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    private val human = SimpleDateFormat("d MMM yyyy", Locale("in", "ID"))
-    private val monthYear = SimpleDateFormat("MMM yyyy", Locale("in", "ID"))
+    private val monthYear = SimpleDateFormat("MMMM yyyy", ID)
+    private val monthAlone = SimpleDateFormat("MMMM", ID)
+    private val monthAbbr = SimpleDateFormat("MMM", ID)
+    private val dayHuman = SimpleDateFormat("EEE d MMM", ID)
 
-    fun rp(v: Long): String = "Rp " + nf.format(v)
-    fun rpSigned(v: Long): String = (if (v < 0) "\u2212" else "") + "Rp " + nf.format(Math.abs(v))
-    fun num(v: Long): String = nf.format(v)
-    fun short(v: Long): String {
-        val a = Math.abs(v)
-        return when {
-            a >= 1_000_000 -> String.format(Locale.US, "%.1f", v / 1_000_000.0).replace('.', ',') + "jt"
-            a >= 1_000 -> Math.round(v / 1000.0).toString() + "rb"
-            else -> v.toString()
+    /** 16.421.404 (minus selalu U+2212) */
+    fun num(v: Long): String = nf.format(v).replace('-', '\u2212')
+
+    /** Rp 16.421.404 */
+    fun rp(v: Long): String = "Rp " + num(v)
+
+    /** +6.500.000 / −18.500 (minus U+2212); nol tanpa tanda */
+    fun sign(v: Long): String = when {
+        v == 0L -> "0"
+        v < 0L -> "\u2212" + num(-v)
+        else -> "+" + num(v)
+    }
+
+    /** −18.500 untuk pengeluaran; nol tanpa tanda */
+    fun out(v: Long): String = if (v <= 0L) "0" else "\u2212" + num(v)
+
+    /** 16/11 */
+    fun tgl(dateIso: String): String = dateIso.substring(8, 10) + "/" + dateIso.substring(5, 7)
+
+    fun iso(d: Date): String = raw.format(d)
+    fun parse(s: String): Date = raw.parse(s) ?: Date()
+
+    fun monthLabel(c: Calendar): String = monthYear.format(c.time)
+    fun monthName(c: Calendar): String = monthAlone.format(c.time)
+    fun monthShort(c: Calendar): String = monthAbbr.format(c.time)
+
+    fun dayLabel(dateIso: String): String {
+        val now = Calendar.getInstance()
+        val yesterday = (now.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -1) }
+        return when (dateIso) {
+            iso(now.time) -> "Hari ini"
+            iso(yesterday.time) -> "Kemarin"
+            else -> dayHuman.format(parse(dateIso))
         }
     }
 
-    fun today(): Date = Date()
     fun nowTime(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
-    fun iso(d: Date): String = raw.format(d)
-    fun parse(iso: String): Date = raw.parse(iso) ?: Date()
-    fun human(iso: String): String = human.format(parse(iso))
-    fun monthLabel(y: Int, m: Int): String {
-        val c = Calendar.getInstance(Locale("in", "ID"))
-        c.set(y, m, 1)
-        return monthYear.format(c.time)
-    }
-    fun dayLabel(iso: String): String {
-        val cal = Calendar.getInstance()
-        val d = parse(iso)
-        val todayIso = raw.format(Date())
-        if (iso == todayIso) return "Hari ini"
-        cal.time = Date(); cal.add(Calendar.DAY_OF_YEAR, -1)
-        if (iso == raw.format(cal.time)) return "Kemarin"
-        val h = SimpleDateFormat("EEE d MMM", Locale("in", "ID"))
-        return h.format(d)
-    }
 }
 
 class Store(ctx: Context) {
     private val prefs = ctx.getSharedPreferences("saku", Context.MODE_PRIVATE)
 
+    /** Aplikasi mulai dari nol — tidak ada data contoh yang ditanam. */
     fun load(): Saku {
-        val s = prefs.getString("db", null) ?: return seed()
+        val raw = prefs.getString("db", null) ?: return Saku()
         return try {
-            val o = JSONObject(s)
-            val tx = o.getJSONArray("tx").let { a ->
+            val o = JSONObject(raw)
+            val tx = o.optJSONArray("tx")?.let { a ->
                 (0 until a.length()).map { i ->
                     val t = a.getJSONObject(i)
-                    Tx(t.getString("id"), t.getString("date"), t.optString("time", "12:00"),
-                        t.getString("type"), t.getLong("amount"), t.getString("cat"), t.optString("note"))
-                }
-            }
-            val goals = o.optJSONArray("goals")?.let { a ->
-                (0 until a.length()).map { i ->
-                    val g = a.getJSONObject(i)
-                    Goal(g.getString("id"), g.getString("name"), g.getLong("target"), g.getLong("saved"))
+                    Tx(
+                        id = t.getString("id"),
+                        date = t.getString("date"),
+                        time = t.optString("time", "12:00"),
+                        type = t.optString("type", "out"),
+                        amount = t.optLong("amount", 0L),
+                        cat = t.optString("cat", "lain"),
+                        note = t.optString("note", "")
+                    )
                 }
             } ?: emptyList()
             val cats = o.optJSONArray("cats")?.let { a ->
                 (0 until a.length()).map { i ->
                     val c = a.getJSONObject(i)
-                    Cat(c.getString("id"), c.getString("name"), c.getLong("color"), c.getString("icon"))
+                    Cat(c.getString("id"), c.optString("name", "Lainnya"), c.optString("glyph", "dot"))
                 }
-            } ?: defaultCats()
-            Saku(tx = tx, cats = cats, goals = goals, dark = o.optBoolean("dark", true))
-        } catch (e: Exception) { seed() }
+            }?.takeIf { it.isNotEmpty() } ?: defaultCats()
+            val goals = o.optJSONArray("goals")?.let { a ->
+                (0 until a.length()).map { i ->
+                    val g = a.getJSONObject(i)
+                    Goal(g.getString("id"), g.optString("name", ""), g.optLong("target"), g.optLong("saved"))
+                }
+            } ?: emptyList()
+            Saku(tx = tx, cats = cats, goals = goals, dark = o.optBoolean("dark", false))
+        } catch (e: Exception) {
+            Saku()
+        }
     }
 
     fun save(s: Saku) {
@@ -147,6 +201,13 @@ class Store(ctx: Context) {
                 })
             }
         })
+        o.put("cats", JSONArray().apply {
+            s.cats.forEach { c ->
+                put(JSONObject().apply {
+                    put("id", c.id); put("name", c.name); put("glyph", c.glyph)
+                })
+            }
+        })
         o.put("goals", JSONArray().apply {
             s.goals.forEach { g ->
                 put(JSONObject().apply {
@@ -154,48 +215,7 @@ class Store(ctx: Context) {
                 })
             }
         })
-        o.put("cats", JSONArray().apply {
-            s.cats.forEach { c ->
-                put(JSONObject().apply {
-                    put("id", c.id); put("name", c.name); put("color", c.color); put("icon", c.icon)
-                })
-            }
-        })
         o.put("dark", s.dark)
         prefs.edit().putString("db", o.toString()).apply()
-    }
-
-    fun seed(): Saku {
-        val tx = mutableListOf<Tx>()
-        val cal = Calendar.getInstance()
-        val now = Date()
-        repeat(6) { k ->
-            val c = Calendar.getInstance()
-            c.add(Calendar.MONTH, -k)
-            fun put(day: Int, type: String, amount: Long, cat: String, note: String, time: String) {
-                val d = Calendar.getInstance()
-                d.set(c.get(Calendar.YEAR), c.get(Calendar.MONTH), day, 12, 0)
-                if (d.time.after(now)) return
-                tx += Tx(System.nanoTime().toString(36) + day + k, Fmt.iso(d.time), time, type, amount, cat, note)
-            }
-            val f = listOf(1.0, 0.86, 1.28, 0.92, 1.14, 0.74)[k]
-            put(2, "in", 6500000, "gaji", "Gaji bulanan", "08:05")
-            put(3, "out", 1800000, "tagihan", "Kos", "09:15")
-            put(4, "out", (380000 * f).toLong(), "makan", "Belanja mingguan", "17:40")
-            put(6, "out", 320000, "transport", "Ojek & bensin", "07:20")
-            put(9, "out", (420000 * f).toLong(), "makan", "Makan siang", "12:30")
-            put(12, "out", (450000 * f).toLong(), "belanja", "Belanja bulanan", "16:10")
-            put(14, "out", (260000 * f).toLong(), "makan", "Kopi & jajan", "15:45")
-            put(18, "out", (180000 * f).toLong(), "hiburan", "Nonton", "19:20")
-        }
-        val s = Saku(
-            tx = tx.sortedByDescending { it.date + it.time },
-            goals = listOf(
-                Goal("g1", "Dana darurat", 10_000_000, 3_200_000),
-                Goal("g2", "Laptop baru", 12_000_000, 4_500_000)
-            )
-        )
-        save(s)
-        return s
     }
 }

@@ -4,18 +4,23 @@ Aplikasi keuangan pribadi untuk Android — catat pengeluaran, grafik tren, dan 
 
 ## Teknologi
 
-- Kotlin + Jetpack Compose (Material 3), AGP 9.2.1, Kotlin 2.4.10, Compose BOM 2026.09.00
-- Liquid glass dock memakai `io.github.kyant0:backdrop:2.0.1` — blur + refraksi tepi (`lens`) + chromatic aberration lewat shader AGSL
-- Penyimpanan: `SharedPreferences` + JSON (tanpa database, tanpa akun)
+- Kotlin + Jetpack Compose **tanpa Material** (foundation + animation saja), AGP 9.2.1, Kotlin 2.4.10, Compose BOM 2026.09.00
+- Tipografi dibundel sebagai resource: Archivo 400/500/600/700 + Newsreader 400 (`res/font/`)
+- Ikon digambar sendiri di `Ui.kt` (grid 20, stroke 1.5) — bukan set ikon Material
+- Penyimpanan: `SharedPreferences` + JSON (tanpa database, tanpa akun). Aplikasi mulai dari nol, tanpa data contoh
 
 ## Fitur
 
-- Beranda: saldo, ringkasan bulan, grafik tren 6 bulan (bisa diketuk), daftar transaksi
-- Catat transaksi: jenis keluar/masuk, nominal, kategori, catatan, kalender pemilih tanggal sendiri
+- Beranda: saldo akhir, masuk/keluar/selisih, grafik 6 bulan, pengeluaran per kategori, ringkasan nabung, tabel transaksi dengan saldo berjalan
+- Catat transaksi: jenis keluar/masuk, nominal, kategori, catatan, kalender pemilih tanggal
 - Navigasi bulan ‹ › pada Beranda dan Transaksi
-- Nabung: target dengan progress, tambah cepat Rp 100rb
-- Pengaturan: tema gelap/terang, kelola kategori (tambah, urutkan, hapus)
-- Dock kaca mengambang: ketuk atau geser (hold & swap) untuk pindah tab
+- Nabung: target dengan progress, tambah cepat Rp 100rb, hapus target
+- Atur: tema terang/gelap, kelola kategori (tambah, urutkan, hapus), ringkasan data
+- Dock datar mengambang: ketuk atau geser untuk pindah tab
+
+## Aturan desain
+
+Sumber kebenaran tampilan ada di [`DESIGN.md`](DESIGN.md); mock acuan di `design/konsep-buku-tabungan-v3.html`.
 
 ## Build
 

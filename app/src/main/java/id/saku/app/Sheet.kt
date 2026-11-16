@@ -1,296 +1,417 @@
 package id.saku.app
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import java.util.Calendar
 import java.util.Date
 
-private fun Modifier.tap(onClick: () -> Unit): Modifier = this.clickable(
-    interactionSource = MutableInteractionSource(), indication = null, onClick = onClick
-)
-
-@Composable
-fun Scrim(onDismiss: () -> Unit) {
-    Box(
-        Modifier.fillMaxSize().background(Color(0xCC000000)).tap(onDismiss)
-    )
-}
-
+/** Sheet catat transaksi: label di atas field, validasi saat blur, satu aksi utama. */
 @Composable
 fun TxSheet(
     t: Tok,
     cats: List<Cat>,
+    lastCat: String?,
     onDismiss: () -> Unit,
     onSave: (Tx) -> Unit
 ) {
     var type by remember { mutableStateOf("out") }
     var amount by remember { mutableStateOf("") }
-    var cat by remember { mutableStateOf(cats.firstOrNull { it.id != "gaji" }?.id ?: "makan") }
+    var cat by remember {
+        val initial = catsFor("out", cats)
+        mutableStateOf(initial.firstOrNull { it.id == lastCat }?.id ?: initial.first().id)
+    }
     var note by remember { mutableStateOf("") }
     var dateIso by remember { mutableStateOf(Fmt.iso(Date())) }
     var calOpen by remember { mutableStateOf(false) }
+    var touched by remember { mutableStateOf(false) }
+    var wasFocused by remember { mutableStateOf(false) }
+    var shown by remember { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
 
-    val visible = remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible.value = true }
+    LaunchedEffect(Unit) { shown = true }
+
+    val nominal = amount.toLongOrNull() ?: 0L
+    val invalid = nominal <= 0L
+    val visibleCats = catsFor(type, cats)
 
     Box(Modifier.fillMaxSize()) {
-        Scrim(onDismiss)
-        AnimatedVisibility(
-            visible = visible.value,
-            enter = slideInVertically(initialOffsetY = { it }),
-            modifier = Modifier.align(Alignment.BottomCenter)
-        ) {
-            Column(
+        AnimatedVisibility(visible = shown, enter = fadeIn(tween(180))) {
+            Box(
                 Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                    .background(t.panel)
-                    .border(1.dp, t.line, RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 14.dp, bottom = 26.dp)
-                    .imePadding()
+                    .fillMaxSize()
+                    .background(if (t.dark) Color(0x99000000) else Color(0x591B2721))
+                    .tap(onDismiss)
+            )
+        }
+
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val maxSheet = maxHeight * 0.94f
+            AnimatedVisibility(
+                visible = shown,
+                enter = slideInVertically(animationSpec = tween(240, easing = FastOutSlowInEasing)) { it },
+                modifier = Modifier.align(Alignment.BottomCenter)
             ) {
-                // pegangan
-                Box(Modifier.align(Alignment.CenterHorizontally).width(38.dp).height(4.dp).clip(CircleShape).background(t.line))
-                Spacer(Modifier.height(16.dp))
-
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Catat transaksi", color = t.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                    Icon(Icons.Rounded.Close, "Tutup", tint = t.muted,
-                        modifier = Modifier.size(22.dp).tap(onDismiss))
-                }
-                Spacer(Modifier.height(18.dp))
-
-                // jenis
-                Row(
-                    Modifier.fillMaxWidth().clip(CircleShape).background(t.track).padding(3.dp)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = maxSheet)
+                        .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                        .background(t.sheet)
+                        .border(1.dp, t.hairSoft, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                        .imePadding()
                 ) {
-                    listOf("out" to "Keluar", "in" to "Masuk").forEach { (v, name) ->
-                        val on = type == v
+                    Column(
+                        Modifier
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 12.dp, bottom = 26.dp)
+                    ) {
                         Box(
-                            Modifier.weight(1f).clip(CircleShape)
-                                .background(if (on) t.panel else Color.Transparent)
-                                .tap { type = v; if (v == "in") cat = "gaji" }
-                                .padding(vertical = 9.dp),
-                            contentAlignment = Alignment.Center
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .width(38.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(t.hair)
+                        )
+                        Spacer(Modifier.height(16.dp))
+
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Catat transaksi", Type.title, t.ink, Modifier.weight(1f))
+                            TouchTarget {
+                                Box(Modifier.fillMaxSize().tap(onDismiss), contentAlignment = Alignment.Center) {
+                                    Glyph(Ic.Close, t.muted2, 18.dp)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(14.dp))
+
+                        // Jenis
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("out" to "Keluar", "in" to "Masuk").forEach { (value, label) ->
+                                val on = type == value
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .border(1.dp, if (on) t.ink else t.hair, RoundedCornerShape(10.dp))
+                                        .tap {
+                                            focus.clearFocus()
+                                            type = value
+                                            val list = catsFor(value, cats)
+                                            if (list.none { it.id == cat }) cat = list.first().id
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        label,
+                                        Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                                        if (on) t.ink else t.muted
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(20.dp))
+
+                        // Nominal
+                        Text("Nominal", Type.label, t.muted2)
+                        Spacer(Modifier.height(6.dp))
+                        FieldShell(t, error = touched && invalid, height = 68.dp) {
+                            Text("Rp", Type.currency, t.muted2)
+                            Spacer(Modifier.width(8.dp))
+                            PlainField(
+                                value = amount,
+                                onValueChange = { v -> amount = v.filter { it.isDigit() }.trimStart('0').take(12) },
+                                placeholder = "0",
+                                t = t,
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                                style = Type.display,
+                                keyboardType = KeyboardType.Number,
+                                onFocus = { focused ->
+                                    if (wasFocused && !focused) touched = true
+                                    wasFocused = focused
+                                }
+                            )
+                        }
+                        if (touched && invalid) {
+                            Text(
+                                "Nominal harus lebih dari nol.",
+                                Type.label,
+                                t.error,
+                                Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        Spacer(Modifier.height(18.dp))
+
+                        // Kategori
+                        Text("Kategori", Type.label, t.muted2)
+                        Spacer(Modifier.height(8.dp))
+                        CatChips(t, visibleCats, cat) {
+                            focus.clearFocus()
+                            cat = it
+                        }
+                        Spacer(Modifier.height(18.dp))
+
+                        // Catatan
+                        Text("Catatan", Type.label, t.muted2)
+                        Spacer(Modifier.height(6.dp))
+                        FieldShell(t) {
+                            PlainField(
+                                value = note,
+                                onValueChange = { note = it.take(60) },
+                                placeholder = "mis. Makan siang",
+                                t = t,
+                                modifier = Modifier.weight(1f).fillMaxHeight()
+                            )
+                        }
+                        Spacer(Modifier.height(18.dp))
+
+                        // Tanggal
+                        Text("Tanggal", Type.label, t.muted2)
+                        Spacer(Modifier.height(6.dp))
+                        FieldShell(t) {
+                            Box(
+                                Modifier.weight(1f).fillMaxHeight().tap {
+                                    focus.clearFocus()
+                                    calOpen = !calOpen
+                                },
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Text(
+                                    Fmt.dayLabel(dateIso) + " \u00b7 " + Fmt.tgl(dateIso),
+                                    Type.body,
+                                    t.ink
+                                )
+                            }
+                            TouchTarget {
+                                Box(
+                                    Modifier.fillMaxSize().tap {
+                                        focus.clearFocus()
+                                        calOpen = !calOpen
+                                    },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Glyph(if (calOpen) Ic.Up else Ic.Down, t.muted2, 16.dp)
+                                }
+                            }
+                        }
+
+                        if (calOpen) {
+                            Spacer(Modifier.height(8.dp))
+                            CalendarBox(t, dateIso) {
+                                dateIso = it
+                                calOpen = false
+                            }
+                        }
+
+                        Spacer(Modifier.height(22.dp))
+                        PrimaryButton(
+                            label = "Simpan transaksi",
+                            t = t,
+                            enabled = !invalid,
+                            onDisabledClick = { touched = true }
                         ) {
-                            Text(name, color = if (on) t.ink else t.muted, fontSize = 13.sp,
-                                fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                            onSave(
+                                Tx(
+                                    id = System.nanoTime().toString(36),
+                                    date = dateIso,
+                                    time = Fmt.nowTime(),
+                                    type = type,
+                                    amount = nominal,
+                                    cat = cat,
+                                    note = note.trim()
+                                )
+                            )
                         }
                     }
                 }
-                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+}
 
-                // nominal
-                Text("NOMINAL", color = t.dim, fontSize = 10.sp, letterSpacing = 1.4.sp)
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Rp", color = t.muted, fontSize = 22.sp)
-                    Spacer(Modifier.width(8.dp))
-                    Box(Modifier.weight(1f)) {
-                        if (amount.isEmpty()) Text("0", color = t.dim, fontSize = 32.sp, fontWeight = FontWeight.Medium)
-                        BasicTextField(
-                            value = amount,
-                            onValueChange = { v -> amount = v.filter { it.isDigit() }.take(12) },
-                            textStyle = TextStyle(color = t.ink, fontSize = 32.sp, fontWeight = FontWeight.Medium),
-                            cursorBrush = SolidColor(t.lime),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
+/** Kategori yang masuk akal untuk jenis transaksi yang dipilih. */
+private fun catsFor(type: String, cats: List<Cat>): List<Cat> = when (type) {
+    "in" -> cats.filter { it.id == "gaji" || it.id == "lain" }.ifEmpty { cats }
+    else -> cats.filter { it.id != "gaji" }.ifEmpty { cats }
+}
+
+@Composable
+private fun CatChips(t: Tok, cats: List<Cat>, selected: String, onSelect: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        cats.chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { cat ->
+                    val on = cat.id == selected
+                    Row(
+                        Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, if (on) t.ink else t.hair, RoundedCornerShape(10.dp))
+                            .tap { onSelect(cat.id) }
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Glyph(glyphOf(cat.glyph), if (on) t.ink else t.muted, 15.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            cat.name,
+                            Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                            if (on) t.ink else t.muted,
+                            Modifier.weight(1f)
                         )
                     }
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(t.line))
-                Spacer(Modifier.height(18.dp))
-
-                // kategori
-                Text("KATEGORI", color = t.dim, fontSize = 10.sp, letterSpacing = 1.4.sp)
-                Spacer(Modifier.height(10.dp))
-                val shown = cats.filter { if (type == "in") it.id == "gaji" || it.id == "lain" else it.id != "gaji" }
-                ChipGrid(shown.size, 3, 8) { i ->
-                    val c = shown[i]
-                    run {
-                        val on = cat == c.id
-                        Row(
-                            Modifier.clip(CircleShape)
-                                .background(if (on) Color(c.color).copy(alpha = 0.18f) else t.track)
-                                .border(1.dp, if (on) Color(c.color).copy(alpha = 0.55f) else Color.Transparent, CircleShape)
-                                .tap { cat = c.id }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(catIcon(c.icon), null, tint = Color(c.color), modifier = Modifier.size(15.dp))
-                            Spacer(Modifier.width(7.dp))
-                            Text(c.name, color = if (on) t.ink else t.muted, fontSize = 12.sp, maxLines = 1)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(18.dp))
-
-                // catatan
-                Text("CATATAN", color = t.dim, fontSize = 10.sp, letterSpacing = 1.4.sp)
-                Spacer(Modifier.height(6.dp))
-                Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(t.track)
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
-                ) {
-                    if (note.isEmpty()) Text("mis. Makan siang", color = t.dim, fontSize = 14.sp)
-                    BasicTextField(
-                        value = note,
-                        onValueChange = { note = it.take(60) },
-                        textStyle = TextStyle(color = t.ink, fontSize = 14.sp),
-                        cursorBrush = SolidColor(t.lime),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                Spacer(Modifier.height(18.dp))
-
-                // tanggal
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(t.track)
-                        .tap { calOpen = !calOpen }
-                        .padding(horizontal = 14.dp, vertical = 13.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Tanggal", color = t.muted, fontSize = 13.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(Fmt.dayLabel(dateIso) + " \u00b7 " + Fmt.human(dateIso), color = t.ink, fontSize = 13.sp)
-                        Spacer(Modifier.width(6.dp))
-                        Icon(if (calOpen) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown, null,
-                            tint = t.muted, modifier = Modifier.size(18.dp))
-                    }
-                }
-
-                if (calOpen) {
-                    Spacer(Modifier.height(10.dp))
-                    CalendarBox(t, dateIso) { dateIso = it; calOpen = false }
-                }
-
-                Spacer(Modifier.height(22.dp))
-
-                val nominal = amount.toLongOrNull() ?: 0L
-                val ok = nominal > 0
-                Box(
-                    Modifier.fillMaxWidth().height(52.dp).clip(CircleShape)
-                        .background(if (ok) t.lime else t.track)
-                        .tap { if (ok) onSave(Tx(System.nanoTime().toString(36), dateIso, Fmt.nowTime(), type, nominal, cat, note)) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Check, null, tint = if (ok) Color(0xFF0A0F12) else t.dim, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Simpan", color = if (ok) Color(0xFF0A0F12) else t.dim, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
-/** grid chip sederhana: perRow kolom, item dipotong sesuai jumlah */
-@Composable
-fun ChipGrid(count: Int, perRow: Int, spacing: Int, content: @Composable (Int) -> Unit) {
-    val rows = (count + perRow - 1) / perRow
-    Column(verticalArrangement = Arrangement.spacedBy(spacing.dp)) {
-        for (r in 0 until rows) {
-            Row(horizontalArrangement = Arrangement.spacedBy(spacing.dp), modifier = Modifier.fillMaxWidth()) {
-                for (c in 0 until perRow) {
-                    val i = r * perRow + c
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                        if (i < count) content(i)
-                    }
-                }
-            }
-        }
-    }
-}
-
+/** Kalender grid 7 kolom, Senin di kolom pertama. */
 @Composable
 fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
-    val cursor = remember {
-        Calendar.getInstance().apply { time = Fmt.parse(selected) }
+    val base = remember { Calendar.getInstance().apply { time = Fmt.parse(selected) } }
+    var year by remember { mutableStateOf(base.get(Calendar.YEAR)) }
+    var month by remember { mutableStateOf(base.get(Calendar.MONTH)) }
+
+    val first = remember(year, month) {
+        Calendar.getInstance().apply {
+            set(year, month, 1, 12, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
     }
-    var ym by remember { mutableStateOf(cursor.get(Calendar.YEAR) to cursor.get(Calendar.MONTH)) }
+    val startDow = (first.get(Calendar.DAY_OF_WEEK) + 5) % 7
+    val days = first.getActualMaximum(Calendar.DAY_OF_MONTH)
+    val todayIso = Fmt.iso(Date())
 
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(t.track).padding(12.dp)
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, t.hair, RoundedCornerShape(10.dp))
+            .padding(10.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.KeyboardArrowLeft, null, tint = t.muted, modifier = Modifier.size(20.dp)
-                .tap { ym = if (ym.second == 0) ym.first - 1 to 11 else ym.first to ym.second - 1 })
-            Text(Fmt.monthLabel(ym.first, ym.second).uppercase(), color = t.ink, fontSize = 12.sp,
-                modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-            Icon(Icons.Rounded.KeyboardArrowRight, null, tint = t.muted, modifier = Modifier.size(20.dp)
-                .tap { ym = if (ym.second == 11) ym.first + 1 to 0 else ym.first to ym.second + 1 })
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth()) {
-            listOf("S", "S", "R", "K", "J", "S", "M").forEach {
-                Text(it, color = t.dim, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            TouchTarget {
+                Box(
+                    Modifier.fillMaxSize().tap {
+                        if (month == 0) {
+                            month = 11
+                            year -= 1
+                        } else {
+                            month -= 1
+                        }
+                    },
+                    contentAlignment = Alignment.Center
+                ) { Glyph(Ic.ChevL, t.muted2, 14.dp) }
+            }
+            Text(
+                Fmt.monthLabel(first),
+                Type.label,
+                t.ink,
+                Modifier.weight(1f),
+                align = TextAlign.Center
+            )
+            TouchTarget {
+                Box(
+                    Modifier.fillMaxSize().tap {
+                        if (month == 11) {
+                            month = 0
+                            year += 1
+                        } else {
+                            month += 1
+                        }
+                    },
+                    contentAlignment = Alignment.Center
+                ) { Glyph(Ic.ChevR, t.muted2, 14.dp) }
             }
         }
-        Spacer(Modifier.height(4.dp))
 
-        val first = Calendar.getInstance().apply {
-            set(ym.first, ym.second, 1)
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            listOf("Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min").forEach {
+                Text(it, Type.micro, t.muted2, Modifier.weight(1f), align = TextAlign.Center)
+            }
         }
-        val startDow = (first.get(Calendar.DAY_OF_WEEK) + 5) % 7  // Senin = 0, Minggu = 6
-        val days = first.getActualMaximum(Calendar.DAY_OF_MONTH)
-        val cells = startDow + days
-        val rows = (cells + 6) / 7
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+
+        val rows = (startDow + days + 6) / 7
+        Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             for (r in 0 until rows) {
                 Row(Modifier.fillMaxWidth()) {
                     for (c in 0 until 7) {
-                        val dayNum = r * 7 + c - startDow + 1
-                        Box(
-                            Modifier.weight(1f).height(34.dp).clip(CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (dayNum in 1..days) {
-                                val cal = Calendar.getInstance().apply { set(ym.first, ym.second, dayNum) }
+                        val day = r * 7 + c - startDow + 1
+                        Box(Modifier.weight(1f).height(34.dp), contentAlignment = Alignment.Center) {
+                            if (day in 1..days) {
+                                val cal = remember(year, month, day) {
+                                    Calendar.getInstance().apply {
+                                        set(year, month, day, 12, 0, 0)
+                                        set(Calendar.MILLISECOND, 0)
+                                    }
+                                }
                                 val iso = Fmt.iso(cal.time)
                                 val on = iso == selected
+                                val isToday = iso == todayIso
                                 Box(
-                                    Modifier.size(30.dp).clip(CircleShape)
-                                        .background(if (on) t.lime else Color.Transparent)
+                                    Modifier
+                                        .size(30.dp)
+                                        .clip(CircleShape)
+                                        .background(if (on) t.accent else Color.Transparent)
+                                        .then(
+                                            if (isToday && !on) {
+                                                Modifier.border(1.dp, t.hair, CircleShape)
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
                                         .tap { onPick(iso) },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("$dayNum", color = if (on) Color(0xFF0A0F12) else t.ink, fontSize = 12.sp)
+                                    Text(
+                                        day.toString(),
+                                        Type.label,
+                                        if (on) (if (t.dark) t.bg else Color.White) else t.ink
+                                    )
                                 }
                             }
                         }
@@ -298,14 +419,23 @@ fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Hari ini", color = t.lime, fontSize = 12.sp,
-                modifier = Modifier.padding(vertical = 4.dp).tap { onPick(Fmt.iso(Date())) })
-            Text("Kemarin", color = t.muted, fontSize = 12.sp,
-                modifier = Modifier.padding(vertical = 4.dp).tap {
-                    val c = Calendar.getInstance(); c.add(Calendar.DAY_OF_YEAR, -1); onPick(Fmt.iso(c.time))
-                })
+
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+                "Hari ini",
+                Type.label.copy(fontWeight = FontWeight.SemiBold),
+                t.accent,
+                Modifier.padding(vertical = 6.dp).tap { onPick(todayIso) }
+            )
+            Text(
+                "Kemarin",
+                Type.label,
+                t.muted2,
+                Modifier.padding(vertical = 6.dp).tap {
+                    val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+                    onPick(Fmt.iso(c.time))
+                }
+            )
         }
     }
 }

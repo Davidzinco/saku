@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Saku — Buku Tabungan · halus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,300..600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#ECEFE7;
+    --sheet:#F7F8F3;
+    --ink:#1B2721;
+    --ink-2:#5C6A62;
+    --ink-3:#8E998F;
+    --hair:rgba(27,39,33,.10);
+    --hair-soft:rgba(27,39,33,.06);
+    --accent:#23418F;
+    --accent-wash:rgba(35,65,143,.07);
+    --pos:#39704F;
+    --bar:#CDD6CA;
+    --ui:'Archivo',system-ui,sans-serif;
+    --serif:'Newsreader',Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:transparent}
+  body{font-family:var(--ui);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+  .stage{display:flex;gap:36px;align-items:flex-start;background:var(--paper);padding:32px;width:max-content}
+
+  .phone{width:390px;height:844px;background:var(--paper);border-radius:34px;overflow:hidden;position:relative;
+         border:1px solid rgba(27,39,33,.08);
+         box-shadow:0 24px 60px -20px rgba(27,39,33,.28),0 2px 6px rgba(27,39,33,.06)}
+  .screen{position:absolute;inset:0;padding:0 24px;display:flex;flex-direction:column;background:var(--paper)}
+
+  .status{display:flex;justify-content:space-between;align-items:center;height:38px;
+          font-size:11.5px;font-weight:600;color:var(--ink);letter-spacing:.01em}
+  .status .r{display:flex;align-items:center;gap:6px;color:var(--ink-2);font-weight:500}
+  .bat{width:20px;height:10px;border:1.2px solid var(--ink-2);border-radius:3px;position:relative}
+  .bat::after{content:'';position:absolute;left:1.4px;top:1.4px;bottom:1.4px;width:12px;background:var(--ink-2);border-radius:1.4px}
+
+  .head{display:flex;justify-content:space-between;align-items:center;padding:4px 0 0}
+  .wordmark{font-size:13px;font-weight:700;letter-spacing:.22em;color:var(--ink)}
+  .page{font-size:10.5px;font-weight:500;color:var(--ink-3);letter-spacing:.04em}
+
+  /* saldo */
+  .saldo{padding:26px 0 22px}
+  .label{font-size:11.5px;font-weight:500;color:var(--ink-3);letter-spacing:.01em}
+  .amount{display:flex;align-items:baseline;gap:9px;margin-top:4px}
+  .amount .cur{font-size:16px;font-weight:500;color:var(--ink-3)}
+  .amount .val{font-family:var(--serif);font-weight:400;font-size:47px;line-height:1.1;color:var(--ink);
+               letter-spacing:-.018em;font-variant-numeric:lining-nums tabular-nums;white-space:nowrap}
+  .split{display:flex;gap:30px;margin-top:18px}
+  .split .v{font-size:15px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:3px;color:var(--ink)}
+  .split .v.pos{color:var(--pos)}
+
+  /* grafik */
+  .chart{padding:6px 0 18px}
+  .chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .nav{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);
+       background:var(--hair-soft)}
+  .nav svg{width:14px;height:14px}
+  .month{font-size:12.5px;font-weight:600;letter-spacing:.01em;color:var(--ink)}
+  .bars{display:flex;align-items:flex-end;gap:14px;height:64px}
+  .bar{flex:1;height:100%;display:flex;align-items:flex-end}
+  .fill{width:100%;max-width:26px;margin:0 auto;border-radius:5px 5px 2px 2px;background:var(--bar)}
+  .bar.on .fill{background:var(--accent)}
+  .axis{display:flex;gap:14px;margin-top:9px}
+  .axis span{flex:1;text-align:center;font-size:10px;font-weight:500;color:var(--ink-3);letter-spacing:.02em}
+  .axis span.on{color:var(--ink);font-weight:600}
+  .caption{margin-top:10px;font-size:11px;color:var(--ink-3)}
+  .caption b{font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+  /* daftar */
+  .listwrap{flex:1;overflow:hidden}
+  .sect{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2px}
+  .sect .t{font-size:13px;font-weight:600;color:var(--ink)}
+  .sect .n{font-size:11px;color:var(--ink-3)}
+  .cols{display:grid;grid-template-columns:40px 1fr 82px 76px;gap:10px;padding:9px 0 8px;
+        font-size:9.5px;font-weight:600;letter-spacing:.08em;color:var(--ink-3);text-transform:uppercase;
+        border-bottom:1px solid var(--hair);white-space:nowrap}
+  .cols span:nth-child(3),.cols span:nth-child(4){text-align:right}
+  .row{display:grid;grid-template-columns:40px 1fr 82px 76px;gap:10px;align-items:center;
+       height:52px;border-bottom:1px solid var(--hair-soft)}
+  .d{font-size:11px;font-weight:500;color:var(--ink-3);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+  .ket{min-width:0}
+  .ket .note{font-size:14px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ket .meta{display:flex;align-items:center;gap:8px;margin-top:3px;font-size:10.5px;color:var(--ink-3)}
+  .dotm{width:2.5px;height:2.5px;border-radius:50%;background:var(--ink-3);opacity:.55;flex:none}
+  .jml{font-size:13.5px;font-weight:500;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+  .jml.pos{color:var(--pos)}
+  .sal{font-size:11px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink-3);white-space:nowrap;margin-top:3px}
+  .row.new .sal{color:var(--accent);font-weight:600}
+
+  .fade{position:absolute;left:0;right:0;bottom:0;height:150px;pointer-events:none;
+        background:linear-gradient(to top,var(--paper) 34%,rgba(236,239,231,0))}
+
+  /* dock */
+  .dock{position:absolute;left:22px;right:22px;bottom:24px;height:68px;background:var(--sheet);
+        border-radius:22px;display:grid;grid-template-columns:1fr 1fr 58px 1fr 1fr;align-items:center;
+        box-shadow:0 10px 28px -8px rgba(27,39,33,.22),0 1px 2px rgba(27,39,33,.06);
+        border:1px solid rgba(27,39,33,.05)}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:9.5px;font-weight:500;
+       letter-spacing:.02em;color:var(--ink-3);position:relative;height:68px;justify-content:center}
+  .tab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .tab.on{color:var(--accent);font-weight:600}
+  .tab.on::before{content:'';position:absolute;inset:12px 10px;background:var(--accent-wash);border-radius:14px;z-index:-1}
+  .fab{width:54px;height:54px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;
+       font-size:26px;font-weight:300;line-height:1;margin-top:-22px;
+       box-shadow:0 8px 18px -4px rgba(35,65,143,.45)}
+  .fab span{transform:translateY(-1px)}
+
+  /* panel */
+  .side{width:214px;display:flex;flex-direction:column;gap:22px;padding-top:6px}
+  .side h2{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+  .sw{display:flex;align-items:center;gap:10px;font-size:11.5px;color:var(--ink);padding:3.5px 0}
+  .sw i{width:20px;height:20px;border-radius:6px;flex:none;box-shadow:inset 0 0 0 1px rgba(27,39,33,.10)}
+  .sw code{font-family:var(--ui);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+  .dark{background:#121A16;border-radius:12px;padding:14px;color:#E7EDE5}
+  .dark .s{display:flex;align-items:center;gap:9px;font-size:10.5px;padding:3px 0;color:#B9C6BA}
+  .dark .s i{width:14px;height:14px;border-radius:5px;flex:none;box-shadow:inset 0 0 0 1px rgba(231,237,229,.18)}
+  .spec{font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+  .spec b{color:var(--ink);font-weight:600}
+  .serif{font-family:var(--serif);font-size:34px;font-weight:400;color:var(--ink);line-height:1.15;letter-spacing:-.015em;font-variant-numeric:lining-nums}
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <div class="phone">
+    <div class="screen">
+      <div class="status"><span>9.41</span><span class="r"><span class="bat"></span></span></div>
+
+      <div class="head">
+        <span class="wordmark">SAKU</span>
+        <span class="page">Lembar 11 / 2026</span>
+      </div>
+
+      <div class="saldo">
+        <div class="label">Saldo akhir</div>
+        <div class="amount"><span class="cur">Rp</span><span class="val">16.421.404</span></div>
+        <div class="split">
+          <div><div class="label">Masuk</div><div class="v pos">+6.500.000</div></div>
+          <div><div class="label">Keluar</div><div class="v">−2.406.500</div></div>
+        </div>
+      </div>
+
+      <div class="chart">
+        <div class="chart-head">
+          <span class="nav"><svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></span>
+          <span class="month">November 2026</span>
+          <span class="nav"><svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></span>
+        </div>
+        <div class="bars">
+          <div class="bar"><div class="fill" style="height:70%"></div></div>
+          <div class="bar"><div class="fill" style="height:61%"></div></div>
+          <div class="bar"><div class="fill" style="height:89%"></div></div>
+          <div class="bar"><div class="fill" style="height:74%"></div></div>
+          <div class="bar"><div class="fill" style="height:100%"></div></div>
+          <div class="bar on"><div class="fill" style="height:52%"></div></div>
+        </div>
+        <div class="axis"><span>Jun</span><span>Jul</span><span>Agu</span><span>Sep</span><span>Okt</span><span class="on">Nov</span></div>
+        <div class="caption">Tertinggi Oktober, <b>Rp 4.600.000</b></div>
+      </div>
+
+      <div class="listwrap">
+        <div class="sect"><span class="t">Transaksi</span><span class="n">6 catatan</span></div>
+        <div class="cols"><span>Tgl</span><span>Keterangan</span><span>Jumlah</span><span>Saldo</span></div>
+
+        <div class="row new">
+          <div class="d">16/11</div>
+          <div class="ket"><div class="note">Makan warung</div><div class="meta">Makan <span class="dotm"></span> 12:40</div></div>
+          <div class="jml">−18.500</div><div class="sal">16.421.404</div>
+        </div>
+        <div class="row">
+          <div class="d">15/11</div>
+          <div class="ket"><div class="note">Kopi &amp; jajan</div><div class="meta">Makan <span class="dotm"></span> 15:45</div></div>
+          <div class="jml">−26.000</div><div class="sal">16.439.904</div>
+        </div>
+        <div class="row">
+          <div class="d">13/11</div>
+          <div class="ket"><div class="note">Belanja bulanan</div><div class="meta">Belanja <span class="dotm"></span> 16:10</div></div>
+          <div class="jml">−450.000</div><div class="sal">16.465.904</div>
+        </div>
+        <div class="row">
+          <div class="d">11/11</div>
+          <div class="ket"><div class="note">Makan siang</div><div class="meta">Makan <span class="dotm"></span> 12:30</div></div>
+          <div class="jml">−42.000</div><div class="sal">16.915.904</div>
+        </div>
+        <div class="row">
+          <div class="d">09/11</div>
+          <div class="ket"><div class="note">Ojek &amp; bensin</div><div class="meta">Transport <span class="dotm"></span> 07:20</div></div>
+          <div class="jml">−32.000</div><div class="sal">16.957.904</div>
+        </div>
+        <div class="row">
+          <div class="d">07/11</div>
+          <div class="ket"><div class="note">Belanja mingguan</div><div class="meta">Makan <span class="dotm"></span> 17:40</div></div>
+          <div class="jml">−38.000</div><div class="sal">16.989.904</div>
+        </div>
+
+      </div>
+
+
+      <div class="dock">
+        <div class="tab on"><svg viewBox="0 0 20 20"><path d="M3 8.4 10 3l7 5.4V16a1 1 0 0 1-1 1h-4v-5h-4v5H4a1 1 0 0 1-1-1V8.4Z"/></svg>Beranda</div>
+        <div class="tab"><svg viewBox="0 0 20 20"><path d="M5 3h10v14l-2-1.4-1.7 1.4L10 15.6 8.3 17 6.6 15.6 5 17V3Z"/><path d="M7.6 7h4.8M7.6 10.4h4.8"/></svg>Transaksi</div>
+        <div class="fab"><span>+</span></div>
+        <div class="tab"><svg viewBox="0 0 20 20"><rect x="2.6" y="6" width="14.8" height="9.4" rx="2"/><path d="M2.6 9.4h14.8"/><path d="M6 6V4.6h8V6"/></svg>Nabung</div>
+        <div class="tab"><svg viewBox="0 0 20 20"><path d="M3 6h14M3 10h14M3 14h14"/><circle cx="7" cy="6" r="1.7" fill="var(--sheet)"/><circle cx="13" cy="10" r="1.7" fill="var(--sheet)"/><circle cx="8.6" cy="14" r="1.7" fill="var(--sheet)"/></svg>Atur</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div>
+      <h2>Kertas &amp; tinta</h2>
+      <div class="sw"><i style="background:#ECEFE7"></i><span>kertas <code>#ECEFE7</code></span></div>
+      <div class="sw"><i style="background:#F7F8F3"></i><span>lembar <code>#F7F8F3</code></span></div>
+      <div class="sw"><i style="background:#1B2721"></i><span>tinta <code>#1B2721</code></span></div>
+      <div class="sw"><i style="background:#23418F"></i><span>cap <code>#23418F</code></span></div>
+      <div class="sw"><i style="background:#39704F"></i><span>masuk <code>#39704F</code></span></div>
+      <div class="sw"><i style="background:#CDD6CA"></i><span>batang <code>#CDD6CA</code></span></div>
+    </div>
+    <div>
+      <h2>Mode malam</h2>
+      <div class="dark">
+        <div class="s"><i style="background:#121A16"></i>kertas #121A16</div>
+        <div class="s"><i style="background:#1A241F"></i>lembar #1A241F</div>
+        <div class="s"><i style="background:#E7EDE5"></i>tinta #E7EDE5</div>
+        <div class="s"><i style="background:#8FA5F2"></i>cap #8FA5F2</div>
+        <div class="s"><i style="background:#7FBE99"></i>masuk #7FBE99</div>
+      </div>
+    </div>
+    <div>
+      <h2>Angka</h2>
+      <div class="serif">16.421.404</div>
+      <p class="spec" style="margin-top:10px"><b>Newsreader</b> untuk saldo saja — angka serif bikin nominal terasa tercetak, bukan dashboard. Selebihnya <b>Archivo</b> dengan tabular figures.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
