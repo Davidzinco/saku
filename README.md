@@ -11,12 +11,12 @@ Aplikasi keuangan pribadi untuk Android — catat pengeluaran, grafik tren, dan 
 
 ## Fitur
 
-- Beranda: saldo akhir, masuk/keluar/selisih, grafik 6 bulan, pengeluaran per kategori, ringkasan nabung, tabel transaksi dengan saldo berjalan
-- Catat transaksi: jenis keluar/masuk, nominal, kategori, catatan, kalender pemilih tanggal
-- Navigasi bulan ‹ › pada Beranda dan Transaksi
-- Nabung: target dengan progress, tambah cepat Rp 100rb, hapus target
-- Atur: tema terang/gelap, kelola kategori (tambah, urutkan, hapus), ringkasan data
-- Dock datar mengambang: ketuk atau geser untuk pindah tab
+- Home: saldo akhir, masuk/keluar/selisih, grafik batang/garis 6–12 bulan (bisa diketuk dan digeser), pengeluaran per kategori, ringkasan nabung, tabel transaksi dengan saldo berjalan
+- Catat/ubah transaksi: nominal berformat ribuan, Date, Time (picker geser), kategori, note; hapus dengan dua ketuk konfirmasi
+- Geser halaman untuk pindah tab, atau ketuk/geser dock
+- Nabung: setor/tarik nominal bebas, target bisa diubah, angka tersimpan dihitung dari transaksi (saldo sinkron)
+- Setting: folder Theme (mode + 6 palet + custom), Category, Chart (batang/garis, 6/12 bulan)
+- Tema default monokrom mode gelap
 
 ## Aturan desain
 

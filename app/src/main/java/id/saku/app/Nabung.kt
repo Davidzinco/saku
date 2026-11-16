@@ -1,5 +1,6 @@
 package id.saku.app
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,35 +20,45 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import java.util.Calendar
+import java.util.Locale
 
 @Composable
-fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
-    val saved = saku.goals.sumOf { it.saved }
-    val target = saku.goals.sumOf { it.target }
-    val pct = if (target > 0) (saved * 100 / target).toInt() else 0
+fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onSheet: (GoalSheet) -> Unit) {
+    val savedTotal = saku.savedTotal()
+    val targetTotal = saku.goals.sumOf { it.target }
+    val pct = if (targetTotal > 0) (savedTotal * 100 / targetTotal).toInt() else 0
+    val shownSaved = animatedLong(savedTotal)
+
+    val now = Calendar.getInstance()
+    val prefix = String.format(Locale.US, "%04d-%02d", now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1)
+    val thisMonth = saku.tx.filter { it.goal.isNotEmpty() && it.date.startsWith(prefix) }.sumOf { -it.signed }
 
     var newName by remember { mutableStateOf("") }
     var newTarget by remember { mutableStateOf("") }
     val targetValue = newTarget.toLongOrNull() ?: 0L
     val canSave = newName.isNotBlank() && targetValue > 0L
-    val focus = LocalFocusManager.current
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
-        Text("Nabung", Type.title, t.ink, Modifier.padding(top = 12.dp))
-        Spacer(Modifier.height(18.dp))
+        ScreenHeader(t, "Nabung", back = false)
+        Spacer(Modifier.height(14.dp))
 
         Text("Tersimpan", Type.label, t.muted2)
-        Text(Fmt.num(saved), Type.display, t.ink, Modifier.padding(top = 3.dp))
+        Text(Fmt.num(shownSaved), Type.display, t.ink, Modifier.padding(top = 3.dp))
         Text(
-            if (target > 0) "dari " + Fmt.rp(target) + " \u00b7 " + pct + "%" else "Belum ada target",
+            if (targetTotal > 0) "dari " + Fmt.rp(targetTotal) + " \u00b7 " + pct + "%" else "Belum ada target",
             Type.label,
             t.muted2,
             Modifier.padding(top = 2.dp)
         )
+
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+            Stat(t, "Saldo akhir", Fmt.rp(saku.balance()), t.ink)
+            Stat(t, "Setoran bulan ini", Fmt.sign(thisMonth), if (thisMonth > 0) t.pos else t.ink)
+        }
 
         Spacer(Modifier.height(14.dp))
         Hair(t.hair)
@@ -55,13 +66,21 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
         if (saku.goals.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 4.dp)) {
                 Text("Belum ada target nabung.", Type.body, t.ink)
-                Text("Beri nama target pertama di bawah.", Type.label, t.muted2, Modifier.padding(top = 6.dp))
+                Text(
+                    "Setoran dicatat sebagai transaksi, jadi saldo selalu sinkron.",
+                    Type.label,
+                    t.muted2,
+                    Modifier.padding(top = 6.dp),
+                    maxLines = 3
+                )
             }
         }
 
         saku.goals.forEach { goal ->
-            val frac = if (goal.target > 0) goal.saved.toFloat() / goal.target.toFloat() else 0f
-            val goalPct = if (goal.target > 0) (goal.saved * 100 / goal.target).coerceIn(0, 100).toInt() else 0
+            val saved = saku.savedOf(goal.id)
+            val frac = if (goal.target > 0) saved.toFloat() / goal.target.toFloat() else 0f
+            val goalPct = (frac * 100).toInt().coerceIn(0, 100)
+
             Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -78,40 +97,31 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        Fmt.num(goal.saved) + " / " + Fmt.num(goal.target),
+                        Fmt.num(saved) + " / " + Fmt.num(goal.target),
                         Type.figure,
                         t.muted2,
                         Modifier.weight(1f)
                     )
-                    Box(
-                        Modifier
-                            .height(44.dp)
-                            .padding(horizontal = 10.dp)
-                            .tap {
-                                onChange(
-                                    saku.copy(
-                                        goals = saku.goals.map {
-                                            if (it.id == goal.id) it.copy(saved = it.saved + 100_000L) else it
-                                        }
-                                    )
-                                )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            "+ 100rb",
-                            Type.label.copy(fontWeight = FontWeight.SemiBold),
-                            t.accent
-                        )
-                    }
+                    Text(
+                        "Setor",
+                        Type.label.copy(fontWeight = FontWeight.SemiBold),
+                        t.accent,
+                        Modifier.padding(horizontal = 10.dp, vertical = 12.dp)
+                            .tap { onSheet(GoalSheet.Setor(goal)) }
+                    )
+                    Text(
+                        "Tarik",
+                        Type.label.copy(fontWeight = FontWeight.SemiBold),
+                        if (saved > 0) t.muted else t.faint,
+                        Modifier.padding(horizontal = 10.dp, vertical = 12.dp)
+                            .tap { if (saved > 0) onSheet(GoalSheet.Tarik(goal)) }
+                    )
                     TouchTarget {
                         Box(
-                            Modifier.fillMaxSize().tap {
-                                onChange(saku.copy(goals = saku.goals.filter { it.id != goal.id }))
-                            },
+                            Modifier.fillMaxSize().tap { onSheet(GoalSheet.Ubah(goal)) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Glyph(Ic.Trash, t.muted2, 16.dp)
+                            Glyph(Ic.Pencil, t.muted2, 15.dp)
                         }
                     }
                 }
@@ -137,13 +147,12 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
         FieldShell(t) {
             Text("Rp", Type.currency, t.muted2)
             Spacer(Modifier.width(8.dp))
-            PlainField(
-                value = newTarget,
-                onValueChange = { v -> newTarget = v.filter { it.isDigit() }.take(12) },
-                placeholder = "0",
+            AmountField(
+                digits = newTarget,
+                onDigits = { newTarget = it },
                 t = t,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
-                keyboardType = KeyboardType.Number
+                style = Type.body
             )
         }
         Spacer(Modifier.height(12.dp))
@@ -153,14 +162,12 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
                     goals = saku.goals + Goal(
                         id = "g" + System.nanoTime().toString(36),
                         name = newName.trim(),
-                        target = targetValue,
-                        saved = 0L
+                        target = targetValue
                     )
                 )
             )
             newName = ""
             newTarget = ""
-            focus.clearFocus()
         }
         Spacer(Modifier.height(110.dp))
     }

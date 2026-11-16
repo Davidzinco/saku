@@ -1,6 +1,17 @@
 package id.saku.app
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,13 +27,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -30,6 +50,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.util.Calendar
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 fun shiftMonth(c: Calendar, delta: Int): Calendar = (c.clone() as Calendar).apply {
     set(Calendar.DAY_OF_MONTH, 1)
@@ -41,8 +63,10 @@ fun Beranda(
     saku: Saku,
     t: Tok,
     cursor: Calendar,
+    flashId: String?,
     onCursor: (Calendar) -> Unit,
     onCatat: () -> Unit,
+    onOpen: (Tx) -> Unit,
     onNabung: () -> Unit
 ) {
     val fontScale = LocalDensity.current.fontScale
@@ -67,24 +91,55 @@ fun Beranda(
         TrendSection(t, saku, cursor, onCursor)
         CatSection(t, saku, cursor, onCatat)
         NabungRow(t, saku, onNabung)
-        ListSection(t, saku, rows, running, onCatat, Modifier.weight(1f).padding(top = 2.dp))
+        ListSection(t, saku, cursor, rows, running, flashId, onCatat, onOpen, Modifier.weight(1f).padding(top = 2.dp))
     }
+}
+
+/** Angka yang bergerak ke nilai baru tanpa kehilangan presisi Long. */
+@Composable
+fun animatedLong(target: Long, duration: Int = 420): Long {
+    val scale = motionScale()
+    var from by remember { mutableStateOf(target) }
+    var value by remember { mutableStateOf(target) }
+    val anim = remember { Animatable(0f) }
+
+    LaunchedEffect(target) {
+        if (target == value) return@LaunchedEffect
+        from = value
+        if (scale <= 0f) {
+            value = target
+            return@LaunchedEffect
+        }
+        val start = from
+        anim.snapTo(0f)
+        anim.animateTo(1f, tween(duration, easing = FastOutSlowInEasing)) {
+            value = (start + ((target - start).toDouble() * this.value)).toLong()
+        }
+        value = target
+    }
+    return value
 }
 
 @Composable
 private fun SaldoBlock(t: Tok, saldo: Long, income: Long, outcome: Long, fontScale: Float) {
+    val shownSaldo = animatedLong(saldo)
     Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 11.dp)) {
         Text("Saldo akhir", Type.label, t.muted2)
         Row(Modifier.padding(top = 3.dp)) {
             Text("Rp", Type.currency, t.muted2, Modifier.alignByBaseline())
             Spacer(Modifier.width(9.dp))
-            Text(Fmt.num(saldo), Type.hero(fontScale), t.ink, Modifier.alignByBaseline())
+            Text(Fmt.num(shownSaldo), Type.hero(fontScale), t.ink, Modifier.alignByBaseline())
         }
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
-            Stat(t, "Masuk", Fmt.sign(income), if (income > 0) t.pos else t.ink)
-            Stat(t, "Keluar", Fmt.out(outcome), t.ink)
+            Stat(t, "Masuk", Fmt.sign(animatedLong(income, 360)), if (income > 0) t.pos else t.ink)
+            Stat(t, "Keluar", Fmt.out(animatedLong(outcome, 360)), if (outcome > 0) t.error else t.ink)
             val diff = income - outcome
-            Stat(t, "Selisih", Fmt.sign(diff), if (diff > 0) t.pos else t.ink)
+            Stat(
+                t,
+                "Selisih",
+                Fmt.sign(animatedLong(diff, 360)),
+                if (diff > 0) t.pos else if (diff < 0) t.error else t.ink
+            )
         }
     }
 }
@@ -94,22 +149,6 @@ fun Stat(t: Tok, label: String, value: String, color: Color) {
     Column {
         Text(label, Type.label, t.muted2)
         Text(value, Type.stat, color, Modifier.padding(top = 2.dp))
-    }
-}
-
-/** Baris navigasi bulan yang sama dipakai Beranda dan Transaksi. */
-@Composable
-fun MonthNav(t: Tok, cursor: Calendar, onCursor: (Calendar) -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        NavCircle(t, Ic.ChevL, "Bulan sebelumnya") { onCursor(shiftMonth(cursor, -1)) }
-        Text(
-            Fmt.monthLabel(cursor),
-            Type.section,
-            t.ink,
-            Modifier.weight(1f).padding(horizontal = 8.dp),
-            align = TextAlign.Center
-        )
-        NavCircle(t, Ic.ChevR, "Bulan berikutnya") { onCursor(shiftMonth(cursor, 1)) }
     }
 }
 
@@ -129,47 +168,98 @@ private fun NavCircle(t: Tok, icon: Ic, label: String, onClick: () -> Unit) {
 }
 
 @Composable
+fun MonthNav(t: Tok, cursor: Calendar, onCursor: (Calendar) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        NavCircle(t, Ic.ChevL, "Bulan sebelumnya") { onCursor(shiftMonth(cursor, -1)) }
+        AnimatedContent(
+            targetState = Fmt.monthLabel(cursor),
+            transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+            modifier = Modifier.weight(1f)
+        ) { label ->
+            Text(label, Type.section, t.ink, Modifier.fillMaxWidth().padding(horizontal = 8.dp), align = TextAlign.Center)
+        }
+        NavCircle(t, Ic.ChevR, "Bulan berikutnya") { onCursor(shiftMonth(cursor, 1)) }
+    }
+}
+
+@Composable
 private fun TrendSection(t: Tok, saku: Saku, cursor: Calendar, onCursor: (Calendar) -> Unit) {
-    val data = saku.trend(6, cursor)
-    val max = data.maxOfOrNull { it.second } ?: 0L
+    val scale = motionScale()
+    val data = saku.trend(cursor)
+    val max = (data.maxOfOrNull { it.second } ?: 0L).coerceAtLeast(1L)
     val peak = data.maxByOrNull { it.second }
+    val activeIndex = data.indexOfFirst { sameMonth(it.first, cursor) }
+    val many = data.size > 6
+    val gap = if (many) 4.dp else 14.dp
+    val barW = if (many) 14.dp else 24.dp
+    var slideAcc by remember { mutableStateOf(0f) }
+
+    // geser grafik (batang atau garis) = pindah bulan
+    val slide = Modifier.pointerInput(cursor) {
+        detectHorizontalDragGestures { change, drag ->
+            change.consume()
+            slideAcc += drag
+            val threshold = size.width / 10f
+            if (abs(slideAcc) > threshold) {
+                onCursor(shiftMonth(cursor, if (slideAcc > 0) -1 else 1))
+                slideAcc = 0f
+            }
+        }
+    }
 
     Column(Modifier.fillMaxWidth().topHair(t.hairSoft).padding(top = 7.dp, bottom = 10.dp)) {
         MonthNav(t, cursor, onCursor)
-
         Spacer(Modifier.height(8.dp))
-        Row(
-            Modifier.fillMaxWidth().height(46.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            data.forEach { (cal, total) ->
-                val active = cal.get(Calendar.YEAR) == cursor.get(Calendar.YEAR) &&
-                    cal.get(Calendar.MONTH) == cursor.get(Calendar.MONTH)
-                val frac = if (max <= 0L) 0f else total.toFloat() / max.toFloat()
-                val h = (46f * frac).dp.coerceAtLeast(if (total > 0L) 4.dp else 2.dp)
 
-                Column(
-                    Modifier.weight(1f).fillMaxHeight().tap { onCursor(cal) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Bottom
-                ) {
-                    Box(
-                        Modifier
-                            .width(24.dp)
-                            .height(h)
-                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                            .background(if (active) t.accent else t.bar)
+        if (saku.chart == "garis") {
+            LineChart(
+                t = t,
+                data = data,
+                max = max,
+                activeIndex = activeIndex,
+                onPick = { onCursor(it) },
+                modifier = Modifier.fillMaxWidth().height(46.dp).then(slide),
+                scale = scale
+            )
+        } else {
+            Row(
+                Modifier.fillMaxWidth().height(46.dp).then(slide),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                data.forEachIndexed { i, (cal, total) ->
+                    val target = if (total <= 0L) 0f else (total.toFloat() / max.toFloat()).coerceIn(0.02f, 1f)
+                    val frac by animateFloatAsState(
+                        targetValue = target,
+                        animationSpec = tween(
+                            Motion.d(320, scale),
+                            delayMillis = Motion.d(i * 18, scale),
+                            easing = FastOutSlowInEasing
+                        ),
+                        label = "batang$i"
                     )
+                    val active = i == activeIndex
+                    Box(
+                        Modifier.weight(1f).fillMaxHeight(),
+                        contentAlignment = Alignment.BottomCenter
+                    ) {
+                        Box(
+                            Modifier
+                                .width(barW)
+                                .height(if (total <= 0L) 2.dp else (46f * frac).dp.coerceAtLeast(4.dp))
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                .background(if (active) t.accent else t.bar)
+                                .tap { onCursor(cal) }
+                        )
+                    }
                 }
             }
         }
 
         Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            data.forEach { (cal, _) ->
-                val active = cal.get(Calendar.YEAR) == cursor.get(Calendar.YEAR) &&
-                    cal.get(Calendar.MONTH) == cursor.get(Calendar.MONTH)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
+            data.forEachIndexed { i, (cal, _) ->
+                val active = i == activeIndex
                 Text(
                     Fmt.monthShort(cal),
                     Type.micro.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium),
@@ -181,11 +271,8 @@ private fun TrendSection(t: Tok, saku: Saku, cursor: Calendar, onCursor: (Calend
         }
 
         Spacer(Modifier.height(6.dp))
-        val caption = if (peak != null && peak.second > 0L) {
-            "Tertinggi " + Fmt.monthName(peak.first)
-        } else {
-            "Belum ada pengeluaran di 6 bulan ini"
-        }
+        val caption = if (peak != null && peak.second > 0L) "Tertinggi " + Fmt.monthName(peak.first) else
+            "Belum ada pengeluaran di rentang ini"
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(caption, Type.micro, t.muted2)
             if (peak != null && peak.second > 0L) {
@@ -197,14 +284,91 @@ private fun TrendSection(t: Tok, saku: Saku, cursor: Calendar, onCursor: (Calend
 }
 
 @Composable
+private fun LineChart(
+    t: Tok,
+    data: List<Pair<Calendar, Long>>,
+    max: Long,
+    activeIndex: Int,
+    onPick: (Calendar) -> Unit,
+    modifier: Modifier,
+    scale: Float
+) {
+    val reveal = remember(data) { Animatable(0f) }
+    LaunchedEffect(data) {
+        if (scale <= 0f) reveal.snapTo(1f) else reveal.animateTo(1f, tween(Motion.d(420, scale), easing = FastOutSlowInEasing))
+    }
+    val p = reveal.value
+    val n = data.size
+
+    Canvas(
+        modifier.pointerInput(data) {
+            detectTapGestures { offset ->
+                if (n <= 1) return@detectTapGestures
+                val step = size.width.toFloat() / (n - 1)
+                val idx = (offset.x / step).roundToInt().coerceIn(0, n - 1)
+                onPick(data[idx].first)
+            }
+        }
+    ) {
+        val top = 4.dp.toPx()
+        val bottom = size.height
+        val usable = bottom - top
+        val step = if (n <= 1) size.width else size.width / (n - 1)
+        fun point(i: Int): Offset {
+            val v = data[i].second.toFloat() / max.toFloat()
+            return Offset(i * step, bottom - v.coerceIn(0f, 1f) * usable)
+        }
+
+        drawLine(t.hair, Offset(0f, bottom - 0.5f), Offset(size.width, bottom - 0.5f), 1.dp.toPx())
+
+        for (i in 0 until n - 1) {
+            val seg = (p * (n - 1) - i).coerceIn(0f, 1f)
+            if (seg <= 0f) break
+            val a = point(i)
+            val b = point(i + 1)
+            val end = Offset(a.x + (b.x - a.x) * seg, a.y + (b.y - a.y) * seg)
+            drawLine(
+                color = if (i == activeIndex) t.accent else t.muted2,
+                start = a,
+                end = end,
+                strokeWidth = 1.5.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+
+        for (i in 0 until n) {
+            val shown = p * (n - 1) >= i - 0.001f
+            if (!shown) break
+            val pt = point(i)
+            if (i == activeIndex) {
+                drawCircle(t.accent, 4.dp.toPx(), pt)
+                drawCircle(t.sheet, 1.8.dp.toPx(), pt)
+            } else {
+                drawCircle(t.bg, 2.6.dp.toPx(), pt)
+                drawCircle(t.muted2, 2.6.dp.toPx(), pt, style = androidx.compose.ui.graphics.drawscope.Stroke(1.2.dp.toPx()))
+            }
+        }
+    }
+}
+
+@Composable
 private fun CatSection(t: Tok, saku: Saku, cursor: Calendar, onCatat: () -> Unit) {
+    val scale = motionScale()
     val spent = saku.spendingByCat(cursor)
 
     Column(Modifier.fillMaxWidth().topHair(t.hairSoft).padding(top = 10.dp, bottom = 10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Pengeluaran per kategori", Type.section, t.ink)
+            Text("Spending per kategori", Type.section, t.ink)
             Spacer(Modifier.weight(1f))
-            Text(if (spent.isEmpty()) "\u2014" else "${spent.size} kategori", Type.micro, t.muted2)
+            Text(
+                when {
+                    spent.isEmpty() -> "\u2014"
+                    spent.size > 4 -> "4 dari ${spent.size} kategori"
+                    else -> "${spent.size} kategori"
+                },
+                Type.micro,
+                t.muted2
+            )
         }
 
         if (spent.isEmpty()) {
@@ -212,23 +376,24 @@ private fun CatSection(t: Tok, saku: Saku, cursor: Calendar, onCatat: () -> Unit
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Belum ada pengeluaran bulan ini.", Type.label, t.muted2)
                 Spacer(Modifier.weight(1f))
-                Text(
-                    "Catat",
-                    Type.label.copy(fontWeight = FontWeight.SemiBold),
-                    t.accent,
-                    Modifier.tap(onCatat)
-                )
+                Text("Catat", Type.label.copy(fontWeight = FontWeight.SemiBold), t.accent, Modifier.tap(onCatat))
             }
             return@Column
         }
 
         val top = spent.take(4)
+        val total = top.sumOf { it.second }.coerceAtLeast(1L)
         Spacer(Modifier.height(9.dp))
         Row(Modifier.fillMaxWidth().height(6.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             top.forEachIndexed { i, (_, amount) ->
+                val frac by animateFloatAsState(
+                    targetValue = amount.toFloat() / total.toFloat(),
+                    animationSpec = tween(Motion.d(320, scale), delayMillis = Motion.d(i * 40, scale)),
+                    label = "kategori$i"
+                )
                 Box(
                     Modifier
-                        .weight(amount.toFloat())
+                        .weight(frac.coerceAtLeast(0.001f))
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(3.dp))
                         .background(t.tint[i % t.tint.size])
@@ -244,9 +409,7 @@ private fun CatSection(t: Tok, saku: Saku, cursor: Calendar, onCatat: () -> Unit
                         val i = rowIdx * 2 + colIdx
                         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                             Box(
-                                Modifier
-                                    .size(6.dp)
-                                    .clip(RoundedCornerShape(2.dp))
+                                Modifier.size(6.dp).clip(RoundedCornerShape(2.dp))
                                     .background(t.tint[i % t.tint.size])
                             )
                             Spacer(Modifier.width(7.dp))
@@ -263,12 +426,9 @@ private fun CatSection(t: Tok, saku: Saku, cursor: Calendar, onCatat: () -> Unit
 
 @Composable
 private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
-    val goal = saku.goals.maxByOrNull { it.saved }
+    val goal = saku.goals.maxByOrNull { saku.savedOf(it.id) }
     Column(Modifier.fillMaxWidth().topHair(t.hairSoft).padding(vertical = 10.dp)) {
-        Row(
-            Modifier.fillMaxWidth().tap(onNabung),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxWidth().tap(onNabung), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(26.dp).clip(RoundedCornerShape(9.dp)).background(t.accentWash),
                 contentAlignment = Alignment.Center
@@ -279,8 +439,14 @@ private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 if (goal == null) {
                     Text("Nabung", Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
-                    Text("Belum ada target. Buat yang pertama.", Type.micro, t.muted2, Modifier.padding(top = 2.dp))
+                    Text(
+                        "Belum ada target. Buat yang pertama.",
+                        Type.micro,
+                        t.muted2,
+                        Modifier.padding(top = 2.dp)
+                    )
                 } else {
+                    val saved = saku.savedOf(goal.id)
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             goal.name,
@@ -288,14 +454,10 @@ private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
                             t.ink,
                             Modifier.weight(1f)
                         )
-                        Text(
-                            Fmt.num(goal.saved) + " / " + Fmt.num(goal.target),
-                            Type.figure,
-                            t.muted2
-                        )
+                        Text(Fmt.num(saved) + " / " + Fmt.num(goal.target), Type.figure, t.muted2)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Track(t, if (goal.target > 0) goal.saved.toFloat() / goal.target.toFloat() else 0f)
+                    Track(t, if (goal.target > 0) saved.toFloat() / goal.target.toFloat() else 0f)
                 }
             }
         }
@@ -306,37 +468,66 @@ private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
 private fun ListSection(
     t: Tok,
     saku: Saku,
+    cursor: Calendar,
     rows: List<Tx>,
     running: List<Long>,
+    flashId: String?,
     onCatat: () -> Unit,
+    onOpen: (Tx) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxWidth().topHair(t.hairSoft).padding(top = 10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Transaksi", Type.section, t.ink)
             Spacer(Modifier.weight(1f))
-            Text(if (rows.isEmpty()) "belum ada" else "${rows.size} terakhir", Type.micro, t.muted2)
+            Text(if (rows.isEmpty()) "belum ada" else "${rows.size} transaksi", Type.micro, t.muted2)
         }
         Spacer(Modifier.height(6.dp))
         TableHead(t)
 
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 104.dp)) {
-            if (rows.isEmpty()) {
-                item {
-                    Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 26.dp)) {
-                        Text("Belum ada transaksi bulan ini.", Type.body, t.ink)
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Catat yang pertama.",
-                            Type.label.copy(fontWeight = FontWeight.SemiBold),
-                            t.accent,
-                            Modifier.tap(onCatat)
-                        )
+        val listState = rememberLazyListState()
+        val firstId = rows.firstOrNull()?.id
+        LaunchedEffect(firstId) { listState.scrollToItem(0) }
+
+        // animasi saat ganti bulan: daftar memudar masuk
+        AnimatedContent(
+            targetState = cursor.get(Calendar.YEAR) * 100 + cursor.get(Calendar.MONTH),
+            transitionSpec = {
+                fadeIn(tween(240, delayMillis = 60)) togetherWith fadeOut(tween(120))
+            },
+            modifier = Modifier.weight(1f)
+        ) { _ ->
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(bottom = 104.dp)
+            ) {
+                if (rows.isEmpty()) {
+                    item {
+                        Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 26.dp)) {
+                            Text("Belum ada transaksi bulan ini.", Type.body, t.ink)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Catat yang pertama.",
+                                Type.label.copy(fontWeight = FontWeight.SemiBold),
+                                t.accent,
+                                Modifier.tap(onCatat)
+                            )
+                        }
                     }
                 }
-            }
-            itemsIndexed(rows) { i, tx ->
-                TxRow(t, saku, tx, running.getOrElse(i) { 0L }, newest = i == 0)
+                itemsIndexed(rows, key = { _, tx -> tx.id }) { i, tx ->
+                    Box(Modifier.animateItem()) {
+                        TxRow(
+                            t = t,
+                            saku = saku,
+                            tx = tx,
+                            saldo = running.getOrElse(i) { 0L },
+                            newest = i == 0,
+                            flash = tx.id == flashId
+                        ) { onOpen(tx) }
+                    }
+                }
             }
         }
     }
@@ -358,16 +549,30 @@ fun TableHead(t: Tok) {
 }
 
 @Composable
-fun TxRow(t: Tok, saku: Saku, tx: Tx, saldo: Long, newest: Boolean) {
+fun TxRow(t: Tok, saku: Saku, tx: Tx, saldo: Long, newest: Boolean, flash: Boolean, onClick: () -> Unit) {
     val catName = saku.catOf(tx.cat)?.name ?: "Lainnya"
     val note = tx.note.ifBlank { catName }
     val desc = Fmt.dayLabel(tx.date) + ", " + note + ", " +
         (if (tx.type == "in") "masuk " else "keluar ") + Fmt.num(tx.amount) +
         ", saldo " + Fmt.num(saldo)
 
-    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = desc }) {
+    // kilatan singkat saat baris baru ditambah/diubah
+    val flashAnim = remember { Animatable(0f) }
+    LaunchedEffect(flash) {
+        if (flash) {
+            flashAnim.snapTo(1f)
+            flashAnim.animateTo(0f, tween(900, easing = FastOutSlowInEasing))
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(t.accent.copy(alpha = 0.16f * flashAnim.value))
+            .semantics(mergeDescendants = true) { contentDescription = desc }
+    ) {
         Row(
-            Modifier.fillMaxWidth().height(49.dp),
+            Modifier.fillMaxWidth().height(49.dp).tap(onClick),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -389,7 +594,7 @@ fun TxRow(t: Tok, saku: Saku, tx: Tx, saldo: Long, newest: Boolean) {
             Text(
                 (if (tx.type == "in") "+" else "\u2212") + Fmt.num(tx.amount),
                 Type.amount,
-                if (tx.type == "in") t.pos else t.ink,
+                if (tx.type == "in") t.pos else t.error,
                 Modifier.width(82.dp),
                 align = TextAlign.End
             )

@@ -1,24 +1,50 @@
 package id.saku.app
 
+import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,21 +61,75 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+
+/** Skala durasi DESIGN.md § Motion; 0 kalau animasi sistem dimatikan. */
+object Motion {
+    const val PRESS = 120
+    const val ENTER = 180
+    const val SHEET = 240
+    const val SCREEN = 320
+
+    fun d(base: Int, scale: Float): Int = if (scale <= 0f) 0 else (base * scale).toInt().coerceAtLeast(1)
+}
+
+@Composable
+fun motionScale(): Float {
+    val ctx = LocalContext.current
+    val scale = remember(ctx) {
+        try {
+            Settings.Global.getFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+        } catch (e: Exception) {
+            1f
+        }
+    }
+    return if (scale <= 0f) 0f else scale.coerceAtMost(1.5f)
+}
 
 internal fun Modifier.tap(onClick: () -> Unit): Modifier = clickable(
     interactionSource = MutableInteractionSource(), indication = null, onClick = onClick
 )
 
-/** Teks tunggal aplikasi ini: Archivo/Newsreader lewat `style`, warna eksplisit. */
+/** Ketuk dengan umpan balik tekan: skala 0.97 + redup, transform/opacity saja. */
+@Composable
+fun Modifier.pressable(onClick: () -> Unit): Modifier {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = tween(Motion.PRESS),
+        label = "tekan"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (pressed) 0.9f else 1f,
+        animationSpec = tween(Motion.PRESS),
+        label = "redup"
+    )
+    return this
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            this.alpha = alpha
+        }
+        .clickable(interactionSource = source, indication = null, onClick = onClick)
+}
+
 @Composable
 fun Text(
     text: String,
@@ -77,15 +157,15 @@ fun Hair(color: Color, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(1.dp).background(color))
 }
 
-/** Garis rambut di tepi atas sebuah section. */
 internal fun Modifier.topHair(color: Color): Modifier = drawBehind {
     val w = 1.dp.toPx()
     drawLine(color, Offset(0f, w / 2f), Offset(size.width, w / 2f), w)
 }
 
-/** Batang progress / track nabung, radius 2dp sesuai DESIGN.md § Spacing. */
+/** Batang progress / track nabung, radius 2dp. */
 @Composable
-fun Track(t: Tok, frac: Float, height: Dp = 4.dp) {
+fun Track(t: Tok, frac: Float, height: Dp = 4.dp, color: Color = t.pos) {
+    val animated by animateFloatAsState(frac.coerceIn(0f, 1f), tween(320), label = "progress")
     Box(
         Modifier
             .fillMaxWidth()
@@ -95,18 +175,18 @@ fun Track(t: Tok, frac: Float, height: Dp = 4.dp) {
     ) {
         Box(
             Modifier
-                .fillMaxWidth(frac.coerceIn(0f, 1f))
+                .fillMaxWidth(animated)
                 .height(height)
                 .clip(RoundedCornerShape(height / 2))
-                .background(t.pos)
+                .background(color)
         )
     }
 }
 
 enum class Ic {
     Home, Receipt, Wallet, Sliders,
-    Plus, Close, ChevL, ChevR, Check, Up, Down, Trash,
-    Food, Car, Bag, Film, Heart, Money, Dot
+    Plus, Minus, Close, ChevL, ChevR, Check, Up, Down, Trash, Pencil,
+    Food, Car, Bag, Film, Heart, Money, Dot, Palette, Chart, Tag
 }
 
 fun glyphOf(name: String): Ic = when (name) {
@@ -117,6 +197,7 @@ fun glyphOf(name: String): Ic = when (name) {
     "film" -> Ic.Film
     "heart" -> Ic.Heart
     "money" -> Ic.Money
+    "wallet" -> Ic.Wallet
     else -> Ic.Dot
 }
 
@@ -187,7 +268,7 @@ fun Glyph(ic: Ic, tint: Color, box: Dp = 20.dp, stroke: Dp = 1.5.dp) {
             }
 
             Ic.Plus -> { line(10f, 4.6f, 10f, 15.4f); line(4.6f, 10f, 15.4f, 10f) }
-
+            Ic.Minus -> line(4.6f, 10f, 15.4f, 10f)
             Ic.Close -> { line(5.6f, 5.6f, 14.4f, 14.4f); line(14.4f, 5.6f, 5.6f, 14.4f) }
 
             Ic.ChevL -> path {
@@ -203,7 +284,6 @@ fun Glyph(ic: Ic, tint: Color, box: Dp = 20.dp, stroke: Dp = 1.5.dp) {
             }
 
             Ic.Up -> { line(10f, 16f, 10f, 4f); path { moveTo(5.4f * s, 8.6f * s); lineTo(10f * s, 4f * s); lineTo(14.6f * s, 8.6f * s) } }
-
             Ic.Down -> { line(10f, 4f, 10f, 16f); path { moveTo(5.4f * s, 11.4f * s); lineTo(10f * s, 16f * s); lineTo(14.6f * s, 11.4f * s) } }
 
             Ic.Trash -> {
@@ -213,6 +293,14 @@ fun Glyph(ic: Ic, tint: Color, box: Dp = 20.dp, stroke: Dp = 1.5.dp) {
                     moveTo(8f * s, 5.6f * s); lineTo(8f * s, 3.6f * s); lineTo(12f * s, 3.6f * s)
                     lineTo(12f * s, 5.6f * s)
                 }
+            }
+
+            Ic.Pencil -> {
+                path {
+                    moveTo(4f * s, 16f * s); lineTo(4.8f * s, 12.4f * s); lineTo(12.4f * s, 4.8f * s)
+                    lineTo(15.2f * s, 7.6f * s); lineTo(7.6f * s, 15.2f * s); close()
+                }
+                line(11.2f, 6f, 14f, 8.8f)
             }
 
             Ic.Food -> {
@@ -261,6 +349,30 @@ fun Glyph(ic: Ic, tint: Color, box: Dp = 20.dp, stroke: Dp = 1.5.dp) {
                 close()
             }
 
+            Ic.Palette -> {
+                circle(10f, 10f, 7.4f)
+                circle(7.2f, 8f, 1.1f, filled = true)
+                circle(12.8f, 8f, 1.1f, filled = true)
+                circle(7.6f, 12.6f, 1.1f, filled = true)
+                circle(12.6f, 12.4f, 1.1f, filled = true)
+            }
+
+            Ic.Chart -> {
+                line(3f, 16f, 17f, 16f)
+                path {
+                    moveTo(4f * s, 13f * s); lineTo(8f * s, 8f * s); lineTo(11.4f * s, 11f * s)
+                    lineTo(16f * s, 5f * s)
+                }
+            }
+
+            Ic.Tag -> {
+                path {
+                    moveTo(3.4f * s, 10f * s); lineTo(10f * s, 3.4f * s); lineTo(16.6f * s, 3.4f * s)
+                    lineTo(16.6f * s, 10f * s); lineTo(10f * s, 16.6f * s); close()
+                }
+                circle(13f, 7f, 1.2f)
+            }
+
             Ic.Dot -> {
                 circle(5f, 10f, 1.3f, filled = true)
                 circle(10f, 10f, 1.3f, filled = true)
@@ -270,7 +382,7 @@ fun Glyph(ic: Ic, tint: Color, box: Dp = 20.dp, stroke: Dp = 1.5.dp) {
     }
 }
 
-/** Kotak field dengan label di atasnya — dipakai sheet, Nabung, dan Atur. */
+/** Kotak field: garis rambut, radius 10dp, tinggi tetap supaya seluruh kotak bisa diketuk. */
 @Composable
 fun FieldShell(
     t: Tok,
@@ -292,7 +404,7 @@ fun FieldShell(
     )
 }
 
-/** Field teks: seluruh kotak bisa diketuk untuk fokus, placeholder hilang saat mengetik. */
+/** Field teks dengan placeholder. */
 @Composable
 fun PlainField(
     value: String,
@@ -314,6 +426,67 @@ fun PlainField(
             cursorBrush = SolidColor(t.accent),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focus)
+                .then(if (onFocus != null) Modifier.onFocusChanged { onFocus(it.isFocused) } else Modifier)
+        )
+    }
+}
+
+/** Pemisah ribuan saat mengetik: 18500 → 18.500, kursor tetap di tempat. */
+object Grouping : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val src = text.text
+        if (src.length <= 3) return TransformedText(text, OffsetMapping.Identity)
+
+        val out = StringBuilder()
+        val map = IntArray(src.length + 1)
+        var t = 0
+        for (i in src.indices) {
+            if (i > 0 && (src.length - i) % 3 == 0) {
+                out.append('.')
+                t++
+            }
+            map[i] = t
+            out.append(src[i])
+            t++
+        }
+        map[src.length] = t
+
+        val offset = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = map[offset.coerceIn(0, src.length)]
+            override fun transformedToOriginal(offset: Int): Int {
+                for (i in map.indices) if (map[i] >= offset) return i
+                return src.length
+            }
+        }
+        return TransformedText(AnnotatedString(out.toString()), offset)
+    }
+}
+
+/** Field nominal: angka saja, tampil dengan pemisah ribuan. */
+@Composable
+fun AmountField(
+    digits: String,
+    onDigits: (String) -> Unit,
+    t: Tok,
+    modifier: Modifier = Modifier,
+    style: TextStyle = Type.display,
+    placeholder: String = "0",
+    onFocus: ((Boolean) -> Unit)? = null
+) {
+    val focus = remember { FocusRequester() }
+    Box(modifier.fillMaxWidth().tap { focus.requestFocus() }, contentAlignment = Alignment.CenterStart) {
+        if (digits.isEmpty()) Text(placeholder, style, t.muted2)
+        BasicTextField(
+            value = digits,
+            onValueChange = { v -> onDigits(v.filter { it.isDigit() }.trimStart('0').take(12)) },
+            textStyle = style.copy(color = t.ink),
+            cursorBrush = SolidColor(t.accent),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            visualTransformation = Grouping,
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focus)
@@ -351,8 +524,256 @@ fun PrimaryButton(
     }
 }
 
+/** Tombol sekunder: garis rambut 1dp, teks tinta. */
+@Composable
+fun SecondaryButton(
+    label: String,
+    t: Tok,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(CircleShape)
+            .border(1.dp, t.hair, CircleShape)
+            .tap(onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, Type.body.copy(fontWeight = FontWeight.SemiBold), t.ink, align = TextAlign.Center)
+    }
+}
+
 /** Target sentuh minimum 44dp untuk ikon aksi. */
 @Composable
 fun TouchTarget(content: @Composable () -> Unit) {
     Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { content() }
+}
+
+/** Kontrol segmen dua/tiga pilihan. */
+@Composable
+fun Segmented(
+    t: Tok,
+    options: List<String>,
+    selected: Int,
+    modifier: Modifier = Modifier,
+    onSelect: (Int) -> Unit
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, t.hair, RoundedCornerShape(10.dp))
+    ) {
+        options.forEachIndexed { i, label ->
+            val on = i == selected
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (on) t.accentWash else Color.Transparent)
+                    .tap { onSelect(i) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    label,
+                    Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                    if (on) t.accent else t.muted
+                )
+            }
+        }
+    }
+}
+
+/** Baris menu folder di Atur. */
+@Composable
+fun NavRow(t: Tok, icon: Ic, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().height(60.dp).semantics { contentDescription = title }.tap(onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(28.dp).clip(RoundedCornerShape(9.dp)).background(t.accentWash),
+            contentAlignment = Alignment.Center
+        ) {
+            Glyph(icon, t.accent, 16.dp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, Type.body, t.ink)
+            Text(subtitle, Type.micro, t.muted2, Modifier.padding(top = 2.dp))
+        }
+        Glyph(Ic.ChevR, t.muted2, 16.dp)
+    }
+}
+
+@Composable
+fun ScreenHeader(t: Tok, title: String, back: Boolean, onBack: () -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (back) {
+            TouchTarget {
+                Box(Modifier.fillMaxSize().tap(onBack), contentAlignment = Alignment.Center) {
+                    Glyph(Ic.ChevL, t.ink, 18.dp)
+                }
+            }
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(title, Type.title, t.ink, Modifier.weight(1f))
+    }
+}
+
+/** Kerangka sheet: scrim, slide 240ms, bisa digulir, menghormati IME. */
+@Composable
+fun SheetScaffold(
+    t: Tok,
+    onDismiss: () -> Unit,
+    visible: Boolean = true,
+    footer: @Composable (ColumnScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val scale = motionScale()
+    val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
+    val d = Motion.d(Motion.SHEET, scale)
+
+    Box(Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = shown && visible,
+            enter = fadeIn(tween(Motion.d(Motion.ENTER, scale))),
+            exit = fadeOut(tween(d / 2))
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(if (t.dark) Color(0x99000000) else Color(0x591B2721))
+                    .tap(onDismiss)
+            )
+        }
+        BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+            val maxSheet = maxHeight * 0.94f
+            AnimatedVisibility(
+                visible = shown && visible,
+                enter = slideInVertically(
+                    animationSpec = tween(d, easing = FastOutSlowInEasing)
+                ) { it },
+                exit = slideOutVertically(animationSpec = tween(d, easing = FastOutSlowInEasing)) { it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = maxSheet)
+                        .clip(shape)
+                        .background(t.sheet)
+                        .border(1.dp, t.hairSoft, shape)
+                ) {
+                    Column(
+                        Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp)
+                            .padding(top = 12.dp, bottom = 26.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .width(38.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(t.hair)
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        content()
+                    }
+                    if (footer != null) {
+                        Hair(t.hairSoft)
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp)
+                                .padding(top = 12.dp, bottom = 20.dp)
+                        ) {
+                            footer()
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SheetTitle(t: Tok, title: String, onDismiss: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Type.title, t.ink, Modifier.weight(1f), maxLines = 2)
+        TouchTarget {
+            Box(Modifier.fillMaxSize().tap(onDismiss), contentAlignment = Alignment.Center) {
+                Glyph(Ic.Close, t.muted2, 18.dp)
+            }
+        }
+    }
+}
+
+/** Track geser untuk memilih angka (jam/menit) — geser atau ketuk. */
+@Composable
+fun Scrubber(
+    value: Int,
+    max: Int,
+    t: Tok,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Canvas(
+        modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .pointerInput(max) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    fun set(x: Float) {
+                        val pad = 14.dp.toPx()
+                        val trackW = (size.width - pad * 2).coerceAtLeast(1f)
+                        val frac = ((x - pad) / trackW).coerceIn(0f, 1f)
+                        onChange((frac * max).roundToInt().coerceIn(0, max))
+                    }
+                    set(down.position.x)
+                    down.consume()
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        change.consume()
+                        set(change.position.x)
+                    }
+                }
+            }
+    ) {
+        val cy = size.height / 2f
+        val pad = 14.dp.toPx()
+        val trackW = size.width - pad * 2
+        val frac = (value.toFloat() / max.toFloat()).coerceIn(0f, 1f)
+        val knob = Offset(pad + trackW * frac, cy)
+
+        drawLine(t.hair, Offset(pad, cy), Offset(pad + trackW, cy), 3.dp.toPx(), StrokeCap.Round)
+        drawLine(
+            t.accent,
+            Offset(pad, cy),
+            Offset(pad + trackW * frac, cy),
+            3.dp.toPx(),
+            StrokeCap.Round
+        )
+        for (i in 0..6) {
+            val x = pad + trackW * i / 6f
+            drawLine(t.hair, Offset(x, cy - 11.dp.toPx()), Offset(x, cy - 7.dp.toPx()), 1.dp.toPx())
+        }
+        drawCircle(t.sheet, 9.dp.toPx(), knob)
+        drawCircle(t.accent, 9.dp.toPx(), knob, style = Stroke(2.dp.toPx()))
+    }
 }

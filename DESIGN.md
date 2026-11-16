@@ -77,7 +77,7 @@ Mock acuan (HTML, bukan kode produksi): `design/konsep-buku-tabungan-v3.html` �
 | tint-1..4 | oklch(30.5/58.2/75.8/88.0% 0.02 150) | `#24332B #71806F #A9B4A7 #D3DAD0` | segmen kategori |
 
 **Aturan warna:**
-1. **Merah bukan warna pengeluaran.** Pengeluaran ditulis dengan tinta biasa dan tanda `−`. Merah hanya untuk kegagalan sistem (gagal simpan, data rusak).
+1. **Pengeluaran memakai warna `error` (merah) + tanda `−`.** Diminta eksplisit oleh pemilik aplikasi di V1.2; masuk/keluar tetap dibedakan oleh tanda dan posisi, bukan warna saja.
 2. Kategori dibedakan lewat **glyph**, bukan warna. Grafik kategori memakai satu ramp tinta 4 tingkat, bukan empat hue.
 3. Cap cobalt hanya untuk tiga hal: aksi utama (FAB, tombol simpan), tab aktif, dan saldo baris teratas. Kalau muncul di tempat keempat, hapus.
 4. Tidak ada gradien. Tidak ada glow.
@@ -243,7 +243,7 @@ dengan `amount` bertanda (`+` untuk masuk, `−` untuk keluar). Baris pertama se
 | satu lembar, garis rambut, jarak | kartu bertumpuk dengan bayangan |
 | angka tabular rata kanan | angka proporsional yang tepinya bergerigi |
 | satu aksen cobalt, dipakai 3 tempat | gradien, glow, atau lima warna kategori |
-| pengeluaran ditulis tinta + `−` | merah untuk pengeluaran |
+| pengeluaran merah `error` + `−` | mengandalkan warna saja tanpa tanda |
 | grafik selalu dengan angka | batang tanpa nilai dan tanpa caption |
 | label sentence case 11.5sp | ALL CAPS ber-tracking di setiap section |
 | ikon 20dp stroke 1.5 digambar sendiri | set ikon Material default |
@@ -265,3 +265,4 @@ dengan `amount` bertanda (`+` untuk masuk, `−` untuk keluar). Baris pertama se
 
 - **2026-11-16:** versi awal. Arah *Buku Tabungan* dipilih dari tiga kandidat (Buku Tabungan, Struk Kasir, Dompet), dua putaran penyempurnaan (kasar → halus → halus dan padat). Mock acuan: `design/konsep-buku-tabungan-v3.html`.
 - **2026-11-16 (implementasi):** seluruh aplikasi ditulis ulang mengikuti dokumen ini. Kode lama (kertas hitam + lime, dock kaca `backdrop`, ikon Material, chip warna kategori, label ALL CAPS) dihapus. Font Archivo + Newsreader dibundel, ikon digambar sendiri di `Ui.kt`, dock menjadi satu lembar surface + garis rambut, tabel transaksi 4 kolom dengan saldo berjalan, kategori memakai satu ramp tinta. Data contoh dihapus — aplikasi mulai kosong.
+- **2026-11-16 (V1.2):** tema default monokrom + mode gelap; pengeluaran berwarna `error`; input nominal berformat ribuan; Date + Time (picker geser, tanpa keyboard); edit/hapus transaksi; grafik Batang/Garis dengan rentang 6/12 bulan, bisa diketuk dan digeser; geser halaman untuk pindah tab; Setting dipecah jadi folder Theme/Category/Chart; ikon aplikasi adaptif.

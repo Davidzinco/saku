@@ -1,15 +1,9 @@
 package id.saku.app
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,17 +11,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,231 +32,235 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 
-/** Sheet catat transaksi: label di atas field, validasi saat blur, satu aksi utama. */
+/** Sheet catat/ubah transaksi: nominal berformat, Date + Time (picker geser), bisa hapus. */
 @Composable
 fun TxSheet(
     t: Tok,
     cats: List<Cat>,
-    lastCat: String?,
+    initial: Tx?,
+    visible: Boolean,
     onDismiss: () -> Unit,
-    onSave: (Tx) -> Unit
+    onSave: (Tx) -> Unit,
+    onDelete: (String) -> Unit
 ) {
-    var type by remember { mutableStateOf("out") }
-    var amount by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(initial?.type ?: "out") }
+    var digits by remember { mutableStateOf(initial?.amount?.toString() ?: "") }
     var cat by remember {
-        val initial = catsFor("out", cats)
-        mutableStateOf(initial.firstOrNull { it.id == lastCat }?.id ?: initial.first().id)
+        val initialList = catsFor(initial?.type ?: "out", cats)
+        mutableStateOf(initialList.firstOrNull { it.id == initial?.cat }?.id ?: initialList.first().id)
     }
-    var note by remember { mutableStateOf("") }
-    var dateIso by remember { mutableStateOf(Fmt.iso(Date())) }
+    var note by remember { mutableStateOf(initial?.note ?: "") }
+    var dateIso by remember { mutableStateOf(initial?.date ?: Fmt.iso(Date())) }
+    val initialTime = remember { initial?.time ?: Fmt.nowTime() }
+    var hour by remember { mutableStateOf(initialTime.substringBefore(":").toIntOrNull() ?: 12) }
+    var minute by remember { mutableStateOf(initialTime.substringAfter(":").toIntOrNull() ?: 0) }
     var calOpen by remember { mutableStateOf(false) }
     var touched by remember { mutableStateOf(false) }
     var wasFocused by remember { mutableStateOf(false) }
-    var shown by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
     val focus = LocalFocusManager.current
-
-    LaunchedEffect(Unit) { shown = true }
-
-    val nominal = amount.toLongOrNull() ?: 0L
-    val invalid = nominal <= 0L
+    val amount = digits.toLongOrNull() ?: 0L
+    val invalid = amount <= 0L
     val visibleCats = catsFor(type, cats)
+    val editing = initial != null
 
-    Box(Modifier.fillMaxSize()) {
-        AnimatedVisibility(visible = shown, enter = fadeIn(tween(180))) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(if (t.dark) Color(0x99000000) else Color(0x591B2721))
-                    .tap(onDismiss)
-            )
-        }
-
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val maxSheet = maxHeight * 0.94f
-            AnimatedVisibility(
-                visible = shown,
-                enter = slideInVertically(animationSpec = tween(240, easing = FastOutSlowInEasing)) { it },
-                modifier = Modifier.align(Alignment.BottomCenter)
+    SheetScaffold(
+        t = t,
+        onDismiss = onDismiss,
+        visible = visible,
+        footer = {
+            PrimaryButton(
+                label = if (editing) "Simpan perubahan" else "Simpan transaksi",
+                t = t,
+                enabled = !invalid,
+                onDisabledClick = { touched = true }
             ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = maxSheet)
-                        .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
-                        .background(t.sheet)
-                        .border(1.dp, t.hairSoft, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
-                        .imePadding()
+                onSave(
+                    Tx(
+                        id = initial?.id ?: ("t" + System.nanoTime().toString(36)),
+                        date = dateIso,
+                        time = pad2(hour) + ":" + pad2(minute),
+                        type = type,
+                        amount = amount,
+                        cat = cat,
+                        note = note.trim(),
+                        goal = initial?.goal ?: ""
+                    )
+                )
+            }
+            if (editing) {
+                Spacer(Modifier.height(8.dp))
+                SecondaryButton(
+                    label = if (confirmDelete) "Yakin hapus transaksi ini?" else "Hapus transaksi",
+                    t = t
                 ) {
-                    Column(
-                        Modifier
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 24.dp)
-                            .padding(top = 12.dp, bottom = 26.dp)
-                    ) {
-                        Box(
-                            Modifier
-                                .align(Alignment.CenterHorizontally)
-                                .width(38.dp)
-                                .height(4.dp)
-                                .clip(CircleShape)
-                                .background(t.hair)
-                        )
-                        Spacer(Modifier.height(16.dp))
-
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Catat transaksi", Type.title, t.ink, Modifier.weight(1f))
-                            TouchTarget {
-                                Box(Modifier.fillMaxSize().tap(onDismiss), contentAlignment = Alignment.Center) {
-                                    Glyph(Ic.Close, t.muted2, 18.dp)
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(14.dp))
-
-                        // Jenis
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("out" to "Keluar", "in" to "Masuk").forEach { (value, label) ->
-                                val on = type == value
-                                Box(
-                                    Modifier
-                                        .weight(1f)
-                                        .height(44.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .border(1.dp, if (on) t.ink else t.hair, RoundedCornerShape(10.dp))
-                                        .tap {
-                                            focus.clearFocus()
-                                            type = value
-                                            val list = catsFor(value, cats)
-                                            if (list.none { it.id == cat }) cat = list.first().id
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        label,
-                                        Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
-                                        if (on) t.ink else t.muted
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(20.dp))
-
-                        // Nominal
-                        Text("Nominal", Type.label, t.muted2)
-                        Spacer(Modifier.height(6.dp))
-                        FieldShell(t, error = touched && invalid, height = 68.dp) {
-                            Text("Rp", Type.currency, t.muted2)
-                            Spacer(Modifier.width(8.dp))
-                            PlainField(
-                                value = amount,
-                                onValueChange = { v -> amount = v.filter { it.isDigit() }.trimStart('0').take(12) },
-                                placeholder = "0",
-                                t = t,
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
-                                style = Type.display,
-                                keyboardType = KeyboardType.Number,
-                                onFocus = { focused ->
-                                    if (wasFocused && !focused) touched = true
-                                    wasFocused = focused
-                                }
-                            )
-                        }
-                        if (touched && invalid) {
-                            Text(
-                                "Nominal harus lebih dari nol.",
-                                Type.label,
-                                t.error,
-                                Modifier.padding(top = 4.dp)
-                            )
-                        }
-                        Spacer(Modifier.height(18.dp))
-
-                        // Kategori
-                        Text("Kategori", Type.label, t.muted2)
-                        Spacer(Modifier.height(8.dp))
-                        CatChips(t, visibleCats, cat) {
-                            focus.clearFocus()
-                            cat = it
-                        }
-                        Spacer(Modifier.height(18.dp))
-
-                        // Catatan
-                        Text("Catatan", Type.label, t.muted2)
-                        Spacer(Modifier.height(6.dp))
-                        FieldShell(t) {
-                            PlainField(
-                                value = note,
-                                onValueChange = { note = it.take(60) },
-                                placeholder = "mis. Makan siang",
-                                t = t,
-                                modifier = Modifier.weight(1f).fillMaxHeight()
-                            )
-                        }
-                        Spacer(Modifier.height(18.dp))
-
-                        // Tanggal
-                        Text("Tanggal", Type.label, t.muted2)
-                        Spacer(Modifier.height(6.dp))
-                        FieldShell(t) {
-                            Box(
-                                Modifier.weight(1f).fillMaxHeight().tap {
-                                    focus.clearFocus()
-                                    calOpen = !calOpen
-                                },
-                                contentAlignment = Alignment.CenterStart
-                            ) {
-                                Text(
-                                    Fmt.dayLabel(dateIso) + " \u00b7 " + Fmt.tgl(dateIso),
-                                    Type.body,
-                                    t.ink
-                                )
-                            }
-                            TouchTarget {
-                                Box(
-                                    Modifier.fillMaxSize().tap {
-                                        focus.clearFocus()
-                                        calOpen = !calOpen
-                                    },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Glyph(if (calOpen) Ic.Up else Ic.Down, t.muted2, 16.dp)
-                                }
-                            }
-                        }
-
-                        if (calOpen) {
-                            Spacer(Modifier.height(8.dp))
-                            CalendarBox(t, dateIso) {
-                                dateIso = it
-                                calOpen = false
-                            }
-                        }
-
-                        Spacer(Modifier.height(22.dp))
-                        PrimaryButton(
-                            label = "Simpan transaksi",
-                            t = t,
-                            enabled = !invalid,
-                            onDisabledClick = { touched = true }
-                        ) {
-                            onSave(
-                                Tx(
-                                    id = System.nanoTime().toString(36),
-                                    date = dateIso,
-                                    time = Fmt.nowTime(),
-                                    type = type,
-                                    amount = nominal,
-                                    cat = cat,
-                                    note = note.trim()
-                                )
-                            )
-                        }
-                    }
+                    if (confirmDelete) onDelete(initial!!.id) else confirmDelete = true
                 }
             }
         }
+    ) {
+        SheetTitle(t, if (editing) "Ubah transaksi" else "Catat transaksi", onDismiss)
+        Spacer(Modifier.height(14.dp))
+
+        // Jenis
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("out" to "Keluar", "in" to "Masuk").forEach { (value, label) ->
+                val on = type == value
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, if (on) t.ink else t.hair, RoundedCornerShape(10.dp))
+                        .tap {
+                            focus.clearFocus()
+                            type = value
+                            val list = catsFor(value, cats)
+                            if (list.none { it.id == cat }) cat = list.first().id
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                        if (on) t.ink else t.muted
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+
+        // Nominal
+        Text("Nominal", Type.label, t.muted2)
+        Spacer(Modifier.height(6.dp))
+        FieldShell(t, error = touched && invalid, height = 68.dp) {
+            Text("Rp", Type.currency, t.muted2)
+            Spacer(Modifier.width(8.dp))
+            AmountField(
+                digits = digits,
+                onDigits = { digits = it },
+                t = t,
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                onFocus = { focused ->
+                    if (wasFocused && !focused) touched = true
+                    wasFocused = focused
+                }
+            )
+        }
+        if (touched && invalid) {
+            Text("Nominal harus lebih dari nol.", Type.label, t.error, Modifier.padding(top = 4.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+
+        // Kategori
+        Text("Category", Type.label, t.muted2)
+        Spacer(Modifier.height(8.dp))
+        CatChips(t, visibleCats, cat) {
+            focus.clearFocus()
+            cat = it
+        }
+        Spacer(Modifier.height(16.dp))
+
+        // Catatan
+        Text("Note", Type.label, t.muted2)
+        Spacer(Modifier.height(6.dp))
+        FieldShell(t) {
+            PlainField(
+                value = note,
+                onValueChange = { note = it.take(60) },
+                placeholder = "mis. Makan siang",
+                t = t,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+
+        // Tanggal
+        Text("Date", Type.label, t.muted2)
+        Spacer(Modifier.height(6.dp))
+        FieldShell(t) {
+            Box(
+                Modifier.weight(1f).fillMaxHeight().tap {
+                    focus.clearFocus()
+                    calOpen = !calOpen
+                },
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(Fmt.dayLabel(dateIso) + " \u00b7 " + Fmt.tgl(dateIso), Type.body, t.ink)
+            }
+            TouchTarget {
+                Box(
+                    Modifier.fillMaxSize().tap {
+                        focus.clearFocus()
+                        calOpen = !calOpen
+                    },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Glyph(if (calOpen) Ic.Up else Ic.Down, t.muted2, 16.dp)
+                }
+            }
+        }
+
+        if (calOpen) {
+            Spacer(Modifier.height(8.dp))
+            CalendarBox(t, dateIso) {
+                dateIso = it
+                calOpen = false
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Jam — picker geser, tanpa keyboard
+        Text("Time", Type.label, t.muted2)
+        Spacer(Modifier.height(6.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(t.bg)
+                .border(1.dp, t.hair, RoundedCornerShape(10.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(pad2(hour), Type.display, t.ink)
+                Text(" : ", Type.display, t.muted2)
+                Text(pad2(minute), Type.display, t.ink)
+                Spacer(Modifier.weight(1f))
+                Text(dayPart(hour), Type.micro, t.muted2)
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Jam", Type.micro, t.muted2, Modifier.width(44.dp))
+                Scrubber(hour, 23, t, { hour = it }, Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Menit", Type.micro, t.muted2, Modifier.width(44.dp))
+                Scrubber(minute, 59, t, { minute = it }, Modifier.weight(1f))
+            }
+        }
+
+        if (initial?.goal?.isNotEmpty() == true) {
+            Text(
+                "Transaksi ini setoran nabung — menghapusnya ikut mengurangi saldo target.",
+                Type.micro,
+                t.muted2,
+                Modifier.padding(vertical = 6.dp),
+                maxLines = 3
+            )
+        }
     }
+}
+
+private fun pad2(v: Int): String = String.format(Locale.US, "%02d", v)
+
+private fun dayPart(hour: Int): String = when {
+    hour < 11 -> "pagi"
+    hour < 15 -> "siang"
+    hour < 19 -> "sore"
+    else -> "malam"
 }
 
 /** Kategori yang masuk akal untuk jenis transaksi yang dipilih. */
@@ -347,13 +340,7 @@ fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
                     contentAlignment = Alignment.Center
                 ) { Glyph(Ic.ChevL, t.muted2, 14.dp) }
             }
-            Text(
-                Fmt.monthLabel(first),
-                Type.label,
-                t.ink,
-                Modifier.weight(1f),
-                align = TextAlign.Center
-            )
+            Text(Fmt.monthLabel(first), Type.label, t.ink, Modifier.weight(1f), align = TextAlign.Center)
             TouchTarget {
                 Box(
                     Modifier.fillMaxSize().tap {
@@ -398,11 +385,7 @@ fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
                                         .clip(CircleShape)
                                         .background(if (on) t.accent else Color.Transparent)
                                         .then(
-                                            if (isToday && !on) {
-                                                Modifier.border(1.dp, t.hair, CircleShape)
-                                            } else {
-                                                Modifier
-                                            }
+                                            if (isToday && !on) Modifier.border(1.dp, t.hair, CircleShape) else Modifier
                                         )
                                         .tap { onPick(iso) },
                                     contentAlignment = Alignment.Center

@@ -16,7 +16,8 @@ data class Tx(
     val type: String,      // "in" | "out"
     val amount: Long,      // selalu positif
     val cat: String,
-    val note: String
+    val note: String,
+    val goal: String = ""  // id target nabung, kalau transaksi ini setoran/penarikan
 ) {
     val signed: Long get() = if (type == "in") amount else -amount
 }
@@ -24,16 +25,23 @@ data class Tx(
 /** Kategori dibedakan lewat glyph, bukan warna (DESIGN.md § Color aturan 2). */
 data class Cat(val id: String, val name: String, val glyph: String)
 
-data class Goal(val id: String, val name: String, val target: Long, val saved: Long)
+data class Goal(val id: String, val name: String, val target: Long)
 
 data class Saku(
     val tx: List<Tx> = emptyList(),
     val cats: List<Cat> = defaultCats(),
     val goals: List<Goal> = emptyList(),
-    val dark: Boolean = false
+    val dark: Boolean = true,
+    val paletteId: String = "mono",
+    val customAccent: Long = 0xFF23418F,
+    val customTone: String = "hijau",
+    val chart: String = "batang",   // "batang" | "garis"
+    val months: Int = 6             // 6 | 12
 )
 
-val glyphChoices = listOf("food", "car", "home", "bag", "film", "heart", "money", "dot")
+val glyphChoices = listOf("food", "car", "home", "bag", "film", "heart", "money", "wallet", "dot")
+
+const val CAT_NABUNG = "nabung"
 
 fun defaultCats() = listOf(
     Cat("makan", "Makan", "food"),
@@ -43,8 +51,17 @@ fun defaultCats() = listOf(
     Cat("hiburan", "Hiburan", "film"),
     Cat("kesehatan", "Kesehatan", "heart"),
     Cat("gaji", "Gaji", "money"),
+    Cat(CAT_NABUNG, "Nabung", "wallet"),
     Cat("lain", "Lainnya", "dot")
 )
+
+fun Saku.palette(): Palette = if (paletteId == "custom") {
+    Palette("custom", "Custom", toneOf(customTone), customAccent)
+} else {
+    Palettes.firstOrNull { it.id == paletteId } ?: Palettes[0]
+}
+
+fun Saku.tokens(): Tok = buildTokens(palette(), dark)
 
 fun Saku.monthTxs(c: Calendar): List<Tx> {
     val prefix = String.format(Locale.US, "%04d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1)
@@ -87,21 +104,43 @@ fun Saku.spendingByCat(c: Calendar): List<Pair<Cat, Long>> = monthTxs(c)
     .filter { it.second > 0 }
     .sortedByDescending { it.second }
 
-/** Total pengeluaran n bulan terakhir yang berakhir di bulan `cursor`, urut lama → baru. */
-fun Saku.trend(n: Int, cursor: Calendar): List<Pair<Calendar, Long>> {
-    val out = mutableListOf<Pair<Calendar, Long>>()
-    for (k in n - 1 downTo 0) {
-        val c = (cursor.clone() as Calendar).apply {
-            set(Calendar.DAY_OF_MONTH, 1)
-            add(Calendar.MONTH, -k)
+/**
+ * Jendela grafik: 12 bulan = Jan–Des tahun `cursor`; 6 bulan = Jan–Jun / Jul–Des.
+ * Jendela tidak bergeser saat pindah bulan di dalamnya.
+ */
+fun Saku.chartWindow(cursor: Calendar): List<Calendar> {
+    val year = cursor.get(Calendar.YEAR)
+    val month = cursor.get(Calendar.MONTH)
+    val start = if (months >= 12) 0 else if (month <= 5) 0 else 6
+    val count = if (months >= 12) 12 else 6
+    return (start until start + count).map { m ->
+        Calendar.getInstance().apply {
+            clear()
+            set(year, m, 1, 12, 0, 0)
         }
-        out += c to outcome(c)
     }
-    return out
 }
+
+fun Saku.trend(cursor: Calendar): List<Pair<Calendar, Long>> =
+    chartWindow(cursor).map { it to outcome(it) }
+
+fun sameMonth(a: Calendar, b: Calendar): Boolean =
+    a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.MONTH) == b.get(Calendar.MONTH)
 
 fun Saku.catOf(id: String): Cat? = cats.firstOrNull { it.id == id }
 fun Saku.countFor(catId: String): Int = tx.count { it.cat == catId }
+
+/** Saldo target nabung = setoran − penarikan, diturunkan dari transaksi (selalu sinkron dengan saldo). */
+fun Saku.savedOf(goalId: String): Long = tx.filter { it.goal == goalId }.sumOf { -it.signed }
+fun Saku.savedTotal(): Long = goals.sumOf { savedOf(it.id) }
+fun Saku.goalOf(id: String): Goal? = goals.firstOrNull { it.id == id }
+
+fun Saku.withTx(tx: Tx): Saku = copy(
+    tx = (this.tx.filter { it.id != tx.id } + tx)
+        .sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time })
+)
+
+fun Saku.withoutTx(id: String): Saku = copy(tx = tx.filter { it.id != id })
 
 object Fmt {
     private val ID: Locale = Locale.forLanguageTag("id-ID")
@@ -149,6 +188,25 @@ object Fmt {
     }
 
     fun nowTime(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
+
+    /** "9:5" / "0905" / "09:05" → "09:05"; null kalau belum valid. */
+    fun parseTime(rawInput: String): String? {
+        val digits = rawInput.filter { it.isDigit() }.take(4)
+        if (digits.length < 3) return null
+        val h = digits.take(2).toIntOrNull() ?: return null
+        val m = digits.drop(2).padEnd(2, '0').toIntOrNull() ?: return null
+        if (h > 23 || m > 59) return null
+        return String.format(Locale.US, "%02d:%02d", h, m)
+    }
+
+    /** "0905" → "09:05" saat mengetik; sisanya dibiarkan apa adanya. */
+    fun typeTime(rawInput: String): String {
+        val digits = rawInput.filter { it.isDigit() }.take(4)
+        return when {
+            digits.length <= 2 -> digits
+            else -> digits.take(2) + ":" + digits.drop(2)
+        }
+    }
 }
 
 class Store(ctx: Context) {
@@ -169,7 +227,8 @@ class Store(ctx: Context) {
                         type = t.optString("type", "out"),
                         amount = t.optLong("amount", 0L),
                         cat = t.optString("cat", "lain"),
-                        note = t.optString("note", "")
+                        note = t.optString("note", ""),
+                        goal = t.optString("goal", "")
                     )
                 }
             } ?: emptyList()
@@ -182,10 +241,20 @@ class Store(ctx: Context) {
             val goals = o.optJSONArray("goals")?.let { a ->
                 (0 until a.length()).map { i ->
                     val g = a.getJSONObject(i)
-                    Goal(g.getString("id"), g.optString("name", ""), g.optLong("target"), g.optLong("saved"))
+                    Goal(g.getString("id"), g.optString("name", ""), g.optLong("target"))
                 }
             } ?: emptyList()
-            Saku(tx = tx, cats = cats, goals = goals, dark = o.optBoolean("dark", false))
+            Saku(
+                tx = tx,
+                cats = cats,
+                goals = goals,
+                dark = o.optBoolean("dark", true),
+                paletteId = o.optString("palette", "mono"),
+                customAccent = o.optLong("accent", 0xFF23418F),
+                customTone = o.optString("tone", "hijau"),
+                chart = o.optString("chart", "batang"),
+                months = if (o.optInt("months", 6) >= 12) 12 else 6
+            )
         } catch (e: Exception) {
             Saku()
         }
@@ -198,6 +267,7 @@ class Store(ctx: Context) {
                 put(JSONObject().apply {
                     put("id", t.id); put("date", t.date); put("time", t.time)
                     put("type", t.type); put("amount", t.amount); put("cat", t.cat); put("note", t.note)
+                    put("goal", t.goal)
                 })
             }
         })
@@ -211,11 +281,57 @@ class Store(ctx: Context) {
         o.put("goals", JSONArray().apply {
             s.goals.forEach { g ->
                 put(JSONObject().apply {
-                    put("id", g.id); put("name", g.name); put("target", g.target); put("saved", g.saved)
+                    put("id", g.id); put("name", g.name); put("target", g.target)
                 })
             }
         })
         o.put("dark", s.dark)
+        o.put("palette", s.paletteId)
+        o.put("accent", s.customAccent)
+        o.put("tone", s.customTone)
+        o.put("chart", s.chart)
+        o.put("months", s.months)
         prefs.edit().putString("db", o.toString()).apply()
     }
 }
+
+/** Aksi nabung yang memunculkan sheet dari level aplikasi. */
+sealed interface GoalSheet {
+    data class Setor(val goal: Goal) : GoalSheet
+    data class Tarik(val goal: Goal) : GoalSheet
+    data class Ubah(val goal: Goal) : GoalSheet
+}
+
+/** Setoran: transaksi keluar berkategori Nabung, jadi saldo akhir ikut turun. */
+fun Saku.deposit(goal: Goal, amount: Long): Saku {
+    val tx = Tx(
+        id = "t" + System.nanoTime().toString(36),
+        date = Fmt.iso(Date()),
+        time = Fmt.nowTime(),
+        type = "out",
+        amount = amount,
+        cat = CAT_NABUNG,
+        note = "Setor · " + goal.name,
+        goal = goal.id
+    )
+    val withCat = if (cats.none { it.id == CAT_NABUNG }) {
+        copy(cats = cats + Cat(CAT_NABUNG, "Nabung", "wallet"))
+    } else {
+        this
+    }
+    return withCat.withTx(tx)
+}
+
+/** Penarikan: transaksi masuk, saldo akhir naik lagi. */
+fun Saku.withdraw(goal: Goal, amount: Long): Saku = withTx(
+    Tx(
+        id = "t" + System.nanoTime().toString(36),
+        date = Fmt.iso(Date()),
+        time = Fmt.nowTime(),
+        type = "in",
+        amount = amount,
+        cat = CAT_NABUNG,
+        note = "Tarik · " + goal.name,
+        goal = goal.id
+    )
+)
