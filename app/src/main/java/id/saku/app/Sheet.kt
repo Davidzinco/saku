@@ -34,7 +34,10 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-/** Sheet catat/ubah transaksi: nominal berformat, Date + Time (picker geser), bisa hapus. */
+/**
+ * Sheet catat/ubah transaksi: nominal berformat, Date, Time (stepper + preset),
+ * foto pada note, dan hapus dua ketuk. Urutan field mengikuti DESIGN.md.
+ */
 @Composable
 fun TxSheet(
     t: Tok,
@@ -60,6 +63,7 @@ fun TxSheet(
     var touched by remember { mutableStateOf(false) }
     var wasFocused by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var photo by remember { mutableStateOf(initial?.photo ?: "") }
 
     val focus = LocalFocusManager.current
     val amount = digits.toLongOrNull() ?: 0L
@@ -87,7 +91,8 @@ fun TxSheet(
                         amount = amount,
                         cat = cat,
                         note = note.trim(),
-                        goal = initial?.goal ?: ""
+                        goal = initial?.goal ?: "",
+                        photo = photo
                     )
                 )
             }
@@ -97,7 +102,7 @@ fun TxSheet(
                     label = if (confirmDelete) "Yakin hapus transaksi ini?" else "Hapus transaksi",
                     t = t
                 ) {
-                    if (confirmDelete) onDelete(initial!!.id) else confirmDelete = true
+                    if (confirmDelete) onDelete(initial.id) else confirmDelete = true
                 }
             }
         }
@@ -178,6 +183,10 @@ fun TxSheet(
         }
         Spacer(Modifier.height(16.dp))
 
+        // Foto pada catatan (V1.3 #7)
+        PhotoField(t, photo) { photo = it }
+        Spacer(Modifier.height(16.dp))
+
         // Tanggal
         Text("Date", Type.label, t.muted2)
         Spacer(Modifier.height(6.dp))
@@ -214,33 +223,9 @@ fun TxSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        // Jam — picker geser, tanpa keyboard
-        Text("Time", Type.label, t.muted2)
-        Spacer(Modifier.height(6.dp))
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(t.bg)
-                .border(1.dp, t.hair, RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(pad2(hour), Type.display, t.ink)
-                Text(" : ", Type.display, t.muted2)
-                Text(pad2(minute), Type.display, t.ink)
-                Spacer(Modifier.weight(1f))
-                Text(dayPart(hour), Type.micro, t.muted2)
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Jam", Type.micro, t.muted2, Modifier.width(44.dp))
-                Scrubber(hour, 23, t, { hour = it }, Modifier.weight(1f))
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Menit", Type.micro, t.muted2, Modifier.width(44.dp))
-                Scrubber(minute, 59, t, { minute = it }, Modifier.weight(1f))
-            }
-        }
+        // Jam — V1.3 #5: field ringkas + stepper + preset, bukan dua track geser.
+        // Collapsed by default supaya sheet tidak memakan setengah layar.
+        TimeField(t, hour, minute, { hour = it }, { minute = it })
 
         if (initial?.goal?.isNotEmpty() == true) {
             Text(
@@ -419,6 +404,124 @@ fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
                     onPick(Fmt.iso(c.time))
                 }
             )
+        }
+    }
+}
+
+/**
+ * V1.3 #5 — pengganti dua Scrubber. Satu field 48dp yang bisa dibuka, lalu stepper
+ * jam/menit (ketuk, presisi 1 angka) dan 4 preset waktu. Tidak ada keyboard,
+ * jadi tidak ada inset IME yang mengangkat sheet.
+ */
+@Composable
+private fun TimeField(
+    t: Tok,
+    hour: Int,
+    minute: Int,
+    onHour: (Int) -> Unit,
+    onMinute: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Text("Time", Type.label, t.muted2)
+    Spacer(Modifier.height(6.dp))
+    FieldShell(t) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .tap { expanded = !expanded },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    pad2(hour) + ":" + pad2(minute),
+                    Type.bodySm.copy(fontWeight = FontWeight.SemiBold),
+                    t.ink
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(dayPart(hour), Type.micro, t.muted2)
+            }
+        }
+        TouchTarget {
+            Box(
+                Modifier.fillMaxSize().tap { expanded = !expanded },
+                contentAlignment = Alignment.Center
+            ) {
+                Glyph(if (expanded) Ic.Up else Ic.Down, t.muted2, 16.dp)
+            }
+        }
+    }
+
+    if (expanded) {
+        Spacer(Modifier.height(8.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(t.bg)
+                .border(1.dp, t.hair, RoundedCornerShape(10.dp))
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Stepper(
+                    "Jam", pad2(hour), t, Modifier.weight(1f),
+                    { onHour((hour - 1 + 24) % 24) },
+                    { onHour((hour + 1) % 24) }
+                )
+                Spacer(Modifier.width(8.dp))
+                Stepper(
+                    "Menit", pad2(minute), t, Modifier.weight(1f),
+                    { onMinute((minute - 1 + 60) % 60) },
+                    { onMinute((minute + 1) % 60) }
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(8, 12, 17, 20).forEach { h ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, t.hair, RoundedCornerShape(8.dp))
+                            .tap { onHour(h); onMinute(0) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(dayPart(h), Type.micro, t.muted)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Stepper(
+    label: String,
+    value: String,
+    t: Tok,
+    modifier: Modifier,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit
+) {
+    Row(modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
+        TouchTarget {
+            Box(Modifier.fillMaxSize().tap(onMinus), contentAlignment = Alignment.Center) {
+                Glyph(Ic.Minus, t.muted2, 16.dp)
+            }
+        }
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, Type.micro, t.muted2)
+            Text(value, Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
+        }
+        TouchTarget {
+            Box(Modifier.fillMaxSize().tap(onPlus), contentAlignment = Alignment.Center) {
+                Glyph(Ic.Plus, t.muted2, 16.dp)
+            }
         }
     }
 }

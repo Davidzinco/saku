@@ -86,7 +86,7 @@ fun Transaksi(
                     }
                 }
                 itemsIndexed(rows, key = { _, tx -> tx.id }) { i, tx ->
-                    Box(Modifier.animateItem()) {
+                    Box(Modifier.animateItem().rowEnter(i)) {
                         TxRow(
                             t = t,
                             saku = saku,

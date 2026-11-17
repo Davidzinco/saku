@@ -10,8 +10,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,8 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.util.Calendar
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 fun shiftMonth(c: Calendar, delta: Int): Calendar = (c.clone() as Calendar).apply {
     set(Calendar.DAY_OF_MONTH, 1)
@@ -67,7 +66,8 @@ fun Beranda(
     onCursor: (Calendar) -> Unit,
     onCatat: () -> Unit,
     onOpen: (Tx) -> Unit,
-    onNabung: () -> Unit
+    onNabung: () -> Unit,
+    onScrub: (Boolean) -> Unit = {}
 ) {
     val fontScale = LocalDensity.current.fontScale
     val rows = saku.monthTxs(cursor)
@@ -88,7 +88,7 @@ fun Beranda(
         }
 
         SaldoBlock(t, saku.balance(), saku.income(cursor), saku.outcome(cursor), fontScale)
-        TrendSection(t, saku, cursor, onCursor)
+        TrendSection(t, saku, cursor, onCursor, onScrub)
         CatSection(t, saku, cursor, onCatat)
         NabungRow(t, saku, onNabung)
         ListSection(t, saku, cursor, rows, running, flashId, onCatat, onOpen, Modifier.weight(1f).padding(top = 2.dp))
@@ -183,26 +183,62 @@ fun MonthNav(t: Tok, cursor: Calendar, onCursor: (Calendar) -> Unit, modifier: M
 }
 
 @Composable
-private fun TrendSection(t: Tok, saku: Saku, cursor: Calendar, onCursor: (Calendar) -> Unit) {
+private fun TrendSection(
+    t: Tok,
+    saku: Saku,
+    cursor: Calendar,
+    onCursor: (Calendar) -> Unit,
+    onScrub: (Boolean) -> Unit
+) {
     val scale = motionScale()
     val data = saku.trend(cursor)
     val max = (data.maxOfOrNull { it.second } ?: 0L).coerceAtLeast(1L)
     val peak = data.maxByOrNull { it.second }
-    val activeIndex = data.indexOfFirst { sameMonth(it.first, cursor) }
+    val activeIndex = data.indexOfFirst { sameMonth(it.first, cursor) }.coerceAtLeast(0)
     val many = data.size > 6
     val gap = if (many) 4.dp else 14.dp
     val barW = if (many) 14.dp else 24.dp
-    var slideAcc by remember { mutableStateOf(0f) }
 
-    // geser grafik (batang atau garis) = pindah bulan
-    val slide = Modifier.pointerInput(cursor) {
-        detectHorizontalDragGestures { change, drag ->
-            change.consume()
-            slideAcc += drag
-            val threshold = size.width / 10f
-            if (abs(slideAcc) > threshold) {
-                onCursor(shiftMonth(cursor, if (slideAcc > 0) -1 else 1))
-                slideAcc = 0f
+    // V1.3 #1 — scrub posisional: TEKAN (tanpa harus menggeser) langsung memilih
+    // bulan di bawah jari, dan data bulan itu langsung tampil. Down dikonsumsi di
+    // sini supaya HorizontalPager tidak mengira ini geser pindah halaman.
+    // State dibaca lewat rememberUpdatedState supaya handler tidak restart saat
+    // cursor berubah di tengah gestur (dulu pointerInput(cursor) memutus drag).
+    val dataState = rememberUpdatedState(data)
+    val pickState = rememberUpdatedState(onCursor)
+    val scrubState = rememberUpdatedState(onScrub)
+    val scrub = Modifier.pointerInput(saku.months) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            down.consume()
+            scrubState.value(true)
+
+            var lastData: List<Pair<Calendar, Long>>? = null
+            var lastIndex = -1
+            fun apply(x: Float) {
+                val d = dataState.value
+                if (d.isEmpty() || size.width <= 0) return
+                if (d !== lastData) {
+                    lastData = d
+                    lastIndex = -1
+                }
+                val i = (x / size.width.toFloat() * d.size).toInt().coerceIn(0, d.lastIndex)
+                if (i == lastIndex) return
+                lastIndex = i
+                pickState.value(d[i].first)
+            }
+
+            try {
+                apply(down.position.x)
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) break
+                    change.consume()
+                    apply(change.position.x)
+                }
+            } finally {
+                scrubState.value(false)
             }
         }
     }
@@ -211,46 +247,48 @@ private fun TrendSection(t: Tok, saku: Saku, cursor: Calendar, onCursor: (Calend
         MonthNav(t, cursor, onCursor)
         Spacer(Modifier.height(8.dp))
 
-        if (saku.chart == "garis") {
-            LineChart(
-                t = t,
-                data = data,
-                max = max,
-                activeIndex = activeIndex,
-                onPick = { onCursor(it) },
-                modifier = Modifier.fillMaxWidth().height(46.dp).then(slide),
-                scale = scale
-            )
-        } else {
-            Row(
-                Modifier.fillMaxWidth().height(46.dp).then(slide),
-                horizontalArrangement = Arrangement.spacedBy(gap),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                data.forEachIndexed { i, (cal, total) ->
-                    val target = if (total <= 0L) 0f else (total.toFloat() / max.toFloat()).coerceIn(0.02f, 1f)
-                    val frac by animateFloatAsState(
-                        targetValue = target,
-                        animationSpec = tween(
-                            Motion.d(320, scale),
-                            delayMillis = Motion.d(i * 18, scale),
-                            easing = FastOutSlowInEasing
-                        ),
-                        label = "batang$i"
-                    )
-                    val active = i == activeIndex
-                    Box(
-                        Modifier.weight(1f).fillMaxHeight(),
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        Box(
-                            Modifier
-                                .width(barW)
-                                .height(if (total <= 0L) 2.dp else (46f * frac).dp.coerceAtLeast(4.dp))
-                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
-                                .background(if (active) t.accent else t.bar)
-                                .tap { onCursor(cal) }
+        // Grafik dan strip di bawahnya berbagi handler yang sama: dua ruang gestur
+        // khusus, tidak ada lagi "geser ke kanan malah pindah ke Transaksi".
+        Box(Modifier.fillMaxWidth().height(46.dp).then(scrub)) {
+            if (saku.chart == "garis") {
+                LineChart(
+                    t = t,
+                    data = data,
+                    max = max,
+                    activeIndex = activeIndex,
+                    modifier = Modifier.fillMaxSize(),
+                    scale = scale
+                )
+            } else {
+                Row(
+                    Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    data.forEachIndexed { i, (_, total) ->
+                        val target = if (total <= 0L) 0f else (total.toFloat() / max.toFloat()).coerceIn(0.02f, 1f)
+                        val frac by animateFloatAsState(
+                            targetValue = target,
+                            animationSpec = tween(
+                                Motion.d(320, scale),
+                                delayMillis = Motion.d(i * 18, scale),
+                                easing = FastOutSlowInEasing
+                            ),
+                            label = "batang$i"
                         )
+                        val active = i == activeIndex
+                        Box(
+                            Modifier.weight(1f).fillMaxHeight(),
+                            contentAlignment = Alignment.BottomCenter
+                        ) {
+                            Box(
+                                Modifier
+                                    .width(barW)
+                                    .height(if (total <= 0L) 2.dp else (46f * frac).dp.coerceAtLeast(4.dp))
+                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp))
+                                    .background(if (active) t.accent else t.bar)
+                            )
+                        }
                     }
                 }
             }
@@ -270,7 +308,10 @@ private fun TrendSection(t: Tok, saku: Saku, cursor: Calendar, onCursor: (Calend
             }
         }
 
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
+        ScrubStrip(t, data, activeIndex, scrub)
+        Spacer(Modifier.height(2.dp))
+
         val caption = if (peak != null && peak.second > 0L) "Tertinggi " + Fmt.monthName(peak.first) else
             "Belum ada pengeluaran di rentang ini"
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -279,6 +320,42 @@ private fun TrendSection(t: Tok, saku: Saku, cursor: Calendar, onCursor: (Calend
                 Text(", ", Type.micro, t.muted2)
                 Text(Fmt.rp(peak.second), Type.micro.copy(fontWeight = FontWeight.SemiBold), t.muted2)
             }
+            Spacer(Modifier.weight(1f))
+            Text("tahan & geser", Type.micro, t.faint)
+        }
+    }
+}
+
+/**
+ * Ruang geser khusus (V1.3 #1): track 1dp + penggaris aksen yang mengikuti bulan
+ * aktif. 26dp ini sengaja dikosongkan dari konten lain agar jari punya area aman.
+ */
+@Composable
+private fun ScrubStrip(
+    t: Tok,
+    data: List<Pair<Calendar, Long>>,
+    activeIndex: Int,
+    scrub: Modifier
+) {
+    val frac = if (data.size > 1) {
+        (activeIndex + 0.5f) / data.size.toFloat()
+    } else {
+        0.5f
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(26.dp)
+            .then(scrub)
+            .semantics { contentDescription = "Tahan dan geser untuk memilih bulan" },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(t.hair))
+        Box(
+            Modifier.fillMaxWidth(frac.coerceIn(0.02f, 1f)).height(26.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(t.accent))
         }
     }
 }
@@ -289,7 +366,6 @@ private fun LineChart(
     data: List<Pair<Calendar, Long>>,
     max: Long,
     activeIndex: Int,
-    onPick: (Calendar) -> Unit,
     modifier: Modifier,
     scale: Float
 ) {
@@ -300,16 +376,9 @@ private fun LineChart(
     val p = reveal.value
     val n = data.size
 
-    Canvas(
-        modifier.pointerInput(data) {
-            detectTapGestures { offset ->
-                if (n <= 1) return@detectTapGestures
-                val step = size.width.toFloat() / (n - 1)
-                val idx = (offset.x / step).roundToInt().coerceIn(0, n - 1)
-                onPick(data[idx].first)
-            }
-        }
-    ) {
+    // Tidak ada pointerInput di sini: ketuk dan geser ditangani Box induk,
+    // sehingga grafik batang dan garis punya perilaku scrub yang identik.
+    Canvas(modifier) {
         val top = 4.dp.toPx()
         val bottom = size.height
         val usable = bottom - top
@@ -517,7 +586,7 @@ private fun ListSection(
                     }
                 }
                 itemsIndexed(rows, key = { _, tx -> tx.id }) { i, tx ->
-                    Box(Modifier.animateItem()) {
+                    Box(Modifier.animateItem().rowEnter(i)) {
                         TxRow(
                             t = t,
                             saku = saku,

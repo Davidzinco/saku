@@ -17,7 +17,8 @@ data class Tx(
     val amount: Long,      // selalu positif
     val cat: String,
     val note: String,
-    val goal: String = ""  // id target nabung, kalau transaksi ini setoran/penarikan
+    val goal: String = "",  // id target nabung, kalau transaksi ini setoran/penarikan
+    val photo: String = ""  // path berkas di filesDir/photos/, opsional (V1.3)
 ) {
     val signed: Long get() = if (type == "in") amount else -amount
 }
@@ -36,7 +37,8 @@ data class Saku(
     val customAccent: Long = 0xFF23418F,
     val customTone: String = "hijau",
     val chart: String = "batang",   // "batang" | "garis"
-    val months: Int = 6             // 6 | 12
+    val months: Int = 6,            // 6 | 12
+    val glass: Boolean = true       // dock & FAB liquid glass (V1.3), bisa dimatikan di Theme
 )
 
 val glyphChoices = listOf("food", "car", "home", "bag", "film", "heart", "money", "wallet", "dot")
@@ -96,6 +98,17 @@ fun Saku.runningBalances(c: Calendar, rows: List<Tx>): List<Long> {
     }
 }
 
+/** Saldo berjalan untuk satu transaksi, dipakai sheet detail (V1.3). */
+fun Saku.saldoOf(tx: Tx): Long {
+    val c = Calendar.getInstance().apply {
+        time = Fmt.parse(tx.date)
+        set(Calendar.DAY_OF_MONTH, 1)
+    }
+    val rows = monthTxs(c)
+    val i = rows.indexOfFirst { it.id == tx.id }
+    return if (i < 0) balance() else runningBalances(c, rows)[i]
+}
+
 /** Pengeluaran bulan `c` per kategori, terbesar dulu. */
 fun Saku.spendingByCat(c: Calendar): List<Pair<Cat, Long>> = monthTxs(c)
     .filter { it.type == "out" }
@@ -150,6 +163,7 @@ object Fmt {
     private val monthAlone = SimpleDateFormat("MMMM", ID)
     private val monthAbbr = SimpleDateFormat("MMM", ID)
     private val dayHuman = SimpleDateFormat("EEE d MMM", ID)
+    private val dayFull = SimpleDateFormat("d MMMM yyyy", ID)
 
     /** 16.421.404 (minus selalu U+2212) */
     fun num(v: Long): String = nf.format(v).replace('-', '\u2212')
@@ -186,6 +200,9 @@ object Fmt {
             else -> dayHuman.format(parse(dateIso))
         }
     }
+
+    /** 16 November 2026 */
+    fun longDate(dateIso: String): String = dayFull.format(parse(dateIso))
 
     fun nowTime(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
 
@@ -228,7 +245,8 @@ class Store(ctx: Context) {
                         amount = t.optLong("amount", 0L),
                         cat = t.optString("cat", "lain"),
                         note = t.optString("note", ""),
-                        goal = t.optString("goal", "")
+                        goal = t.optString("goal", ""),
+                        photo = t.optString("photo", "")
                     )
                 }
             } ?: emptyList()
@@ -253,7 +271,8 @@ class Store(ctx: Context) {
                 customAccent = o.optLong("accent", 0xFF23418F),
                 customTone = o.optString("tone", "hijau"),
                 chart = o.optString("chart", "batang"),
-                months = if (o.optInt("months", 6) >= 12) 12 else 6
+                months = if (o.optInt("months", 6) >= 12) 12 else 6,
+                glass = o.optBoolean("glass", true)
             )
         } catch (e: Exception) {
             Saku()
@@ -267,7 +286,7 @@ class Store(ctx: Context) {
                 put(JSONObject().apply {
                     put("id", t.id); put("date", t.date); put("time", t.time)
                     put("type", t.type); put("amount", t.amount); put("cat", t.cat); put("note", t.note)
-                    put("goal", t.goal)
+                    put("goal", t.goal); put("photo", t.photo)
                 })
             }
         })
@@ -291,6 +310,7 @@ class Store(ctx: Context) {
         o.put("tone", s.customTone)
         o.put("chart", s.chart)
         o.put("months", s.months)
+        o.put("glass", s.glass)
         prefs.edit().putString("db", o.toString()).apply()
     }
 }

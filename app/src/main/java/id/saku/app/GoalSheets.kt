@@ -61,7 +61,7 @@ fun AmountSheet(
             )
         }
         if (over) {
-            Text("Melebihi saldo target (" + Fmt.rp(max ?: 0L) + ").", Type.label, t.error, Modifier.padding(top = 4.dp))
+            Text("Melebihi saldo target (" + Fmt.rp(max) + ").", Type.label, t.error, Modifier.padding(top = 4.dp))
         }
 
         Spacer(Modifier.height(10.dp))

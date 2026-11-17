@@ -41,4 +41,11 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.15.0")
+
+    // Liquid Glass (Backdrop) dari https://github.com/Kyant0/AndroidLiquidGlass
+    // Dipakai untuk dock dan FAB; bisa dimatikan lewat Setting > Theme > Dock.
+    // shapes dipakai lens() di dalam backdrop saat runtime (Android 13+), jadi
+    // dideklarasikan eksplisit supaya tidak cuma mengandalkan dependensi transitif.
+    implementation("io.github.kyant0:backdrop:2.0.1")
+    implementation("io.github.kyant0:shapes:1.2.1")
 }

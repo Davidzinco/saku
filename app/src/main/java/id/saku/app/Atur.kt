@@ -80,7 +80,8 @@ private fun AturRoot(saku: Saku, t: Tok, go: (AturPage) -> Unit) {
             t = t,
             icon = Ic.Palette,
             title = "Theme",
-            subtitle = (if (saku.dark) "Dark" else "Light") + " \u00b7 " + saku.palette().name,
+            subtitle = (if (saku.dark) "Dark" else "Light") + " \u00b7 " + saku.palette().name +
+                " \u00b7 " + (if (saku.glass) "Kaca" else "Kertas"),
             onClick = { go(AturPage.Tema) }
         )
         Hair(t.hairSoft)
@@ -134,6 +135,21 @@ private fun TemaPage(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onBack: () ->
         Segmented(t, listOf("Light", "Dark"), if (saku.dark) 1 else 0) { i ->
             onChange(saku.copy(dark = i == 1))
         }
+
+        Spacer(Modifier.height(24.dp))
+        Text("Dock", Type.label, t.muted2)
+        Spacer(Modifier.height(8.dp))
+        Segmented(t, listOf("Kertas", "Kaca"), if (saku.glass) 1 else 0) { i ->
+            onChange(saku.copy(glass = i == 1))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Kaca memakai liquid glass (vibrancy + blur + lens) pada dock dan tombol catat. " +
+                "Efek penuh hanya di Android 13+; di bawah itu otomatis tampil datar.",
+            Type.micro,
+            t.muted2,
+            maxLines = 3
+        )
 
         Spacer(Modifier.height(24.dp))
         Text("Palette", Type.label, t.muted2)

@@ -2,6 +2,7 @@ package id.saku.app
 
 import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -13,8 +14,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -62,7 +61,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -128,6 +126,35 @@ fun Modifier.pressable(onClick: () -> Unit): Modifier {
             this.alpha = alpha
         }
         .clickable(interactionSource = source, indication = null, onClick = onClick)
+}
+
+/**
+ * V1.3 #4 — baris transaksi yang baru muncul masuk dengan fade + naik 16px.
+ * Stagger 26ms per baris (maksimal 8 baris pertama) supaya daftar terasa dicetak
+ * berurutan, bukan muncul serentak. `motionScale() == 0` langsung snap ke 1.
+ */
+@Composable
+fun Modifier.rowEnter(index: Int): Modifier {
+    val scale = motionScale()
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        if (scale <= 0f) {
+            anim.snapTo(1f)
+        } else {
+            anim.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = Motion.d(Motion.ENTER, scale),
+                    delayMillis = Motion.d((index % 8) * 26, scale),
+                    easing = FastOutSlowInEasing
+                )
+            )
+        }
+    }
+    return this.graphicsLayer {
+        alpha = anim.value
+        translationY = (1f - anim.value) * 16f
+    }
 }
 
 @Composable
@@ -721,59 +748,4 @@ fun SheetTitle(t: Tok, title: String, onDismiss: () -> Unit) {
     }
 }
 
-/** Track geser untuk memilih angka (jam/menit) — geser atau ketuk. */
-@Composable
-fun Scrubber(
-    value: Int,
-    max: Int,
-    t: Tok,
-    onChange: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Canvas(
-        modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .pointerInput(max) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    fun set(x: Float) {
-                        val pad = 14.dp.toPx()
-                        val trackW = (size.width - pad * 2).coerceAtLeast(1f)
-                        val frac = ((x - pad) / trackW).coerceIn(0f, 1f)
-                        onChange((frac * max).roundToInt().coerceIn(0, max))
-                    }
-                    set(down.position.x)
-                    down.consume()
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        change.consume()
-                        set(change.position.x)
-                    }
-                }
-            }
-    ) {
-        val cy = size.height / 2f
-        val pad = 14.dp.toPx()
-        val trackW = size.width - pad * 2
-        val frac = (value.toFloat() / max.toFloat()).coerceIn(0f, 1f)
-        val knob = Offset(pad + trackW * frac, cy)
-
-        drawLine(t.hair, Offset(pad, cy), Offset(pad + trackW, cy), 3.dp.toPx(), StrokeCap.Round)
-        drawLine(
-            t.accent,
-            Offset(pad, cy),
-            Offset(pad + trackW * frac, cy),
-            3.dp.toPx(),
-            StrokeCap.Round
-        )
-        for (i in 0..6) {
-            val x = pad + trackW * i / 6f
-            drawLine(t.hair, Offset(x, cy - 11.dp.toPx()), Offset(x, cy - 7.dp.toPx()), 1.dp.toPx())
-        }
-        drawCircle(t.sheet, 9.dp.toPx(), knob)
-        drawCircle(t.accent, 9.dp.toPx(), knob, style = Stroke(2.dp.toPx()))
-    }
-}
+/** V1.3 #5: pemilih jam berpindah ke TimeField di Sheet.kt (stepper + preset). */
