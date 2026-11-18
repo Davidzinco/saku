@@ -1,12 +1,17 @@
 package id.saku.app
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,7 +24,9 @@ import androidx.compose.ui.unit.dp
 
 /**
  * V1.3 #6 — klik baris transaksi membuka detail dulu.
- * Dari sini pengguna baru memilih "Ubah" (ke TxSheet) atau "Hapus" (dua ketuk).
+ * V1.4 #6 — ada navigasi transaksi sebelumnya/berikutnya, dan penghapusan tidak
+ * menutup sheet mendadak: sheet tetap terbuka dengan konfirmasi + tombol Tutup.
+ * V1.4 #7 — beberapa foto, ketuk untuk pratinjau penuh dengan pinch-zoom.
  */
 @Composable
 fun TxDetailSheet(
@@ -27,67 +34,121 @@ fun TxDetailSheet(
     saku: Saku,
     tx: Tx,
     visible: Boolean,
+    index: Int,
+    total: Int,
+    deleted: Boolean,
+    notice: String,
     onDismiss: () -> Unit,
     onEdit: (Tx) -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onNavigate: (Int) -> Unit,
+    onDone: () -> Unit
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
+    var viewerAt by remember { mutableStateOf<Int?>(null) }
     val isIn = tx.type == "in"
-    val amountColor = if (isIn) t.pos else t.error
+    val amountColor = if (isIn) t.pos else if (deleted) t.muted2 else t.error
     val catName = saku.catOf(tx.cat)?.name ?: "Lainnya"
     val goalName = if (tx.goal.isEmpty()) null else saku.goalOf(tx.goal)?.name
+    val photos = tx.allPhotos
 
-    SheetScaffold(
-        t = t,
-        onDismiss = onDismiss,
-        visible = visible,
-        footer = {
-            PrimaryButton("Ubah transaksi", t) { onEdit(tx) }
-            Spacer(Modifier.height(8.dp))
-            SecondaryButton(
-                label = if (confirmDelete) "Yakin hapus transaksi ini?" else "Hapus transaksi",
-                t = t
-            ) {
-                if (confirmDelete) onDelete(tx.id) else confirmDelete = true
+    Box(Modifier.fillMaxSize()) {
+        SheetScaffold(
+            t = t,
+            onDismiss = onDismiss,
+            visible = visible,
+            footer = {
+                if (deleted) {
+                    PrimaryButton("Tutup", t) { onDone() }
+                } else {
+                    PrimaryButton("Ubah transaksi", t) { onEdit(tx) }
+                    Spacer(Modifier.height(8.dp))
+                    SecondaryButton(
+                        label = if (confirmDelete) "Yakin hapus transaksi ini?" else "Hapus transaksi",
+                        t = t
+                    ) {
+                        if (confirmDelete) onDelete(tx.id) else confirmDelete = true
+                    }
+                }
             }
+        ) {
+            SheetTitle(t, "Detail transaksi", onDismiss)
+
+            if (total > 1 && !deleted) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TouchTarget {
+                        Box(
+                            Modifier.fillMaxSize().tap { onNavigate(-1) },
+                            contentAlignment = Alignment.Center
+                        ) { Glyph(Ic.ChevL, t.muted2, 16.dp) }
+                    }
+                    Text("${(index + 1).coerceAtLeast(1)} / $total", Type.micro, t.muted2)
+                    Spacer(Modifier.width(6.dp))
+                    TouchTarget {
+                        Box(
+                            Modifier.fillMaxSize().tap { onNavigate(1) },
+                            contentAlignment = Alignment.Center
+                        ) { Glyph(Ic.ChevR, t.muted2, 16.dp) }
+                    }
+                    Spacer(Modifier.weight(1f))
+                }
+            } else {
+                Spacer(Modifier.height(18.dp))
+            }
+
+            if (notice.isNotEmpty()) {
+                Text(notice, Type.label, t.accent, Modifier.padding(vertical = 8.dp), maxLines = 2)
+            }
+
+            Text(if (isIn) "Masuk" else "Keluar", Type.label, t.muted2)
+            Text(
+                (if (isIn) "+" else "\u2212") + Fmt.num(tx.amount),
+                Type.display,
+                amountColor,
+                Modifier.padding(top = 3.dp)
+            )
+
+            if (photos.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    photos.forEachIndexed { i, path ->
+                        Box(Modifier.tap { viewerAt = i }) {
+                            PhotoThumb(path, t, 72.dp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Hair(t.hair)
+
+            DetailRow(t, "Kategori", catName, glyph = saku.catOf(tx.cat)?.glyph)
+            DetailRow(t, "Catatan", tx.note.ifBlank { "—" })
+            DetailRow(t, "Tanggal", Fmt.longDate(tx.date))
+            DetailRow(t, "Waktu", tx.time + " · " + dayPartLabel(tx.time))
+            DetailRow(t, "Saldo setelah", Fmt.rp(saku.saldoOf(tx)))
+            if (goalName != null) {
+                DetailRow(t, "Target nabung", goalName)
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Saldo setelah dihitung dari seluruh transaksi sampai bulan ini.",
+                Type.micro,
+                t.muted2,
+                Modifier.padding(top = 4.dp),
+                maxLines = 2
+            )
         }
-    ) {
-        SheetTitle(t, "Detail transaksi", onDismiss)
-        Spacer(Modifier.height(18.dp))
 
-        Text(if (isIn) "Masuk" else "Keluar", Type.label, t.muted2)
-        Text(
-            (if (isIn) "+" else "\u2212") + Fmt.num(tx.amount),
-            Type.display,
-            amountColor,
-            Modifier.padding(top = 3.dp)
-        )
-
-        if (tx.photo.isNotEmpty()) {
-            Spacer(Modifier.height(14.dp))
-            PhotoPreview(tx.photo, t)
+        if (viewerAt != null) {
+            BackHandler { viewerAt = null }
+            PhotoViewer(t, photos, viewerAt!!) { viewerAt = null }
         }
-
-        Spacer(Modifier.height(16.dp))
-        Hair(t.hair)
-
-        DetailRow(t, "Kategori", catName, glyph = saku.catOf(tx.cat)?.glyph)
-        DetailRow(t, "Catatan", tx.note.ifBlank { "—" })
-        DetailRow(t, "Tanggal", Fmt.longDate(tx.date))
-        DetailRow(t, "Waktu", tx.time + " · " + dayPartLabel(tx.time))
-        DetailRow(t, "Saldo setelah", Fmt.rp(saku.saldoOf(tx)))
-        if (goalName != null) {
-            DetailRow(t, "Target nabung", goalName)
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Saldo setelah dihitung dari seluruh transaksi sampai bulan ini.",
-            Type.micro,
-            t.muted2,
-            Modifier.padding(top = 4.dp),
-            maxLines = 2
-        )
     }
 }
 

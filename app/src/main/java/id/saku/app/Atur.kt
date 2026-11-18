@@ -1,6 +1,8 @@
 package id.saku.app
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -36,10 +38,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-private enum class AturPage { Root, Tema, Kategori, Grafik }
+private enum class AturPage { Root, Tema, Kategori, Grafik, UI, Home, Cadangan }
 
 @Composable
 fun Atur(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
@@ -63,9 +66,12 @@ fun Atur(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
     ) { current ->
         when (current) {
             AturPage.Root -> AturRoot(saku, t) { page = it }
-            AturPage.Tema -> TemaPage(saku, t, onChange) { page = AturPage.Root }
+            AturPage.Tema -> TemaPage(saku, t, onChange, { page = AturPage.Root }) { page = AturPage.UI }
             AturPage.Kategori -> KategoriPage(saku, t, onChange) { page = AturPage.Root }
             AturPage.Grafik -> GrafikPage(saku, t, onChange) { page = AturPage.Root }
+            AturPage.UI -> UIPage(saku, t, onChange) { page = AturPage.Tema }
+            AturPage.Home -> HomePage(saku, t, onChange) { page = AturPage.Root }
+            AturPage.Cadangan -> CadanganPage(saku, t, onChange) { page = AturPage.Root }
         }
     }
 }
@@ -101,6 +107,22 @@ private fun AturRoot(saku: Saku, t: Tok, go: (AturPage) -> Unit) {
             onClick = { go(AturPage.Grafik) }
         )
         Hair(t.hairSoft)
+        NavRow(
+            t = t,
+            icon = Ic.Home,
+            title = "Home",
+            subtitle = if (saku.showNabungHome) "Nabung tampil" else "Nabung disembunyikan",
+            onClick = { go(AturPage.Home) }
+        )
+        Hair(t.hairSoft)
+        NavRow(
+            t = t,
+            icon = Ic.Backup,
+            title = "Backup",
+            subtitle = "Ekspor / pulihkan data + foto",
+            onClick = { go(AturPage.Cadangan) }
+        )
+        Hair(t.hairSoft)
 
         Spacer(Modifier.height(26.dp))
         Text("Data", Type.label, t.muted2)
@@ -109,7 +131,7 @@ private fun AturRoot(saku: Saku, t: Tok, go: (AturPage) -> Unit) {
         InfoRow(t, "Transaksi", saku.tx.size.toString())
         InfoRow(t, "Target nabung", saku.goals.size.toString())
         InfoRow(t, "Tersimpan", Fmt.rp(saku.savedTotal()))
-        InfoRow(t, "Saldo akhir", Fmt.rp(saku.balance()))
+        InfoRow(t, "Saldo", Fmt.rp(saku.balance()))
 
         Spacer(Modifier.height(24.dp))
         Text("Saku \u00b7 Compose", Type.label, t.ink)
@@ -125,9 +147,26 @@ private fun AturRoot(saku: Saku, t: Tok, go: (AturPage) -> Unit) {
 }
 
 @Composable
-private fun TemaPage(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onBack: () -> Unit) {
+private fun TemaPage(
+    saku: Saku,
+    t: Tok,
+    onChange: (Saku) -> Unit,
+    onBack: () -> Unit,
+    onUI: () -> Unit
+) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
         ScreenHeader(t, "Theme", back = true, onBack = onBack)
+        Spacer(Modifier.height(14.dp))
+
+        // V1.4 #8: Theme > UI, pilih per bagian mana yang memakai liquid glass.
+        NavRow(
+            t = t,
+            icon = Ic.Sliders,
+            title = "UI",
+            subtitle = "Pilih bagian yang memakai liquid glass",
+            onClick = onUI
+        )
+        Hair(t.hairSoft)
         Spacer(Modifier.height(14.dp))
 
         Text("Mode", Type.label, t.muted2)
@@ -137,18 +176,19 @@ private fun TemaPage(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onBack: () ->
         }
 
         Spacer(Modifier.height(24.dp))
-        Text("Dock", Type.label, t.muted2)
+        Text("Mode dasar", Type.label, t.muted2)
         Spacer(Modifier.height(8.dp))
         Segmented(t, listOf("Kertas", "Kaca"), if (saku.glass) 1 else 0) { i ->
             onChange(saku.copy(glass = i == 1))
         }
         Spacer(Modifier.height(6.dp))
         Text(
-            "Kaca memakai liquid glass (vibrancy + blur + lens) pada dock dan tombol catat. " +
-                "Efek penuh hanya di Android 13+; di bawah itu otomatis tampil datar.",
+            "Sakelar utama untuk semua permukaan. Pilih Kaca lalu buka UI untuk menentukan " +
+                "bagian mana saja yang ikut berubah. Efek penuh hanya di Android 13+; " +
+                "di bawah itu otomatis tampil datar.",
             Type.micro,
             t.muted2,
-            maxLines = 3
+            maxLines = 4
         )
 
         Spacer(Modifier.height(24.dp))
@@ -411,6 +451,189 @@ private fun KategoriPage(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onBack: (
                 )
             }
         }
+        Spacer(Modifier.height(110.dp))
+    }
+}
+
+/**
+ * V1.4 #8 — Setting > Theme > UI. Tiap bagian bisa dipilih sendiri antara
+ * kertas dan liquid glass; mode dasar "Kertas" tetap mematikan semuanya.
+ */
+@Composable
+private fun UIPage(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+        ScreenHeader(t, "UI", back = true, onBack = onBack)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Pilih permukaan overlay yang memakai liquid glass. Bagian lain tetap " +
+                "kertas sesuai arah Buku Tabungan.",
+            Type.micro,
+            t.muted2,
+            maxLines = 3
+        )
+        Spacer(Modifier.height(18.dp))
+
+        glassAreas.forEach { (key, label) ->
+            Text(label, Type.body, t.ink)
+            Spacer(Modifier.height(6.dp))
+            Segmented(
+                t,
+                listOf("Kertas", "Kaca"),
+                if (saku.glassPref(key)) 1 else 0
+            ) { i ->
+                val m = saku.uiGlass.toMutableMap()
+                m[key] = i == 1
+                onChange(saku.copy(uiGlass = m, glass = true))
+            }
+            Spacer(Modifier.height(6.dp))
+            if (!saku.glass) {
+                Text("Mode dasar masih Kertas — nyalakan di Theme.", Type.micro, t.muted2)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
+        Text(
+            "Semua permukaan memakai warna dari token tema. Tidak ada gradien, glow, " +
+                "atau perubahan tata letak — hanya material permukaannya.",
+            Type.micro,
+            t.muted2,
+            maxLines = 3
+        )
+        Spacer(Modifier.height(10.dp))
+        // V1.4 crash fix: jelaskan kenapa area di dalam halaman tidak ditawarkan.
+        Text(
+            "Halaman (termasuk Ringkasan Home) selalu kertas: kaca hanya bisa " +
+                "dipasang di atas lapisan yang direkam, bukan di dalamnya.",
+            Type.micro,
+            t.muted2,
+            maxLines = 3
+        )
+        Spacer(Modifier.height(110.dp))
+    }
+}
+
+/** V1.4 #10 — opsi khusus untuk ringkasan Nabung yang tampil di Home. */
+@Composable
+private fun HomePage(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+        ScreenHeader(t, "Home", back = true, onBack = onBack)
+        Spacer(Modifier.height(14.dp))
+
+        Text("Ringkasan nabung", Type.label, t.muted2)
+        Spacer(Modifier.height(8.dp))
+        Segmented(t, listOf("Sembunyikan", "Tampilkan"), if (saku.showNabungHome) 1 else 0) { i ->
+            onChange(saku.copy(showNabungHome = i == 1))
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Text("Bergulir dengan target lain", Type.label, t.muted2)
+        Spacer(Modifier.height(8.dp))
+        Segmented(t, listOf("Tidak", "Ya"), if (saku.nabungScroll) 1 else 0) { i ->
+            onChange(saku.copy(nabungScroll = i == 1))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Ya: semua target tampil berdampingan dan bisa digeser. Tidak: hanya satu target yang di-pin.",
+            Type.micro,
+            t.muted2,
+            maxLines = 3
+        )
+
+        Spacer(Modifier.height(24.dp))
+        Text("Pin di Home", Type.label, t.muted2)
+        Spacer(Modifier.height(8.dp))
+        PickRow(t, "Otomatis (terbanyak)", saku.nabungPinned.isEmpty()) {
+            onChange(saku.copy(nabungPinned = ""))
+        }
+        saku.goals.forEach { g ->
+            PickRow(t, g.name, saku.nabungPinned == g.id) {
+                onChange(saku.copy(nabungPinned = g.id))
+            }
+        }
+        if (saku.goals.isEmpty()) {
+            Text("Belum ada target nabung.", Type.micro, t.muted2, Modifier.padding(top = 6.dp))
+        }
+        Spacer(Modifier.height(110.dp))
+    }
+}
+
+@Composable
+private fun PickRow(t: Tok, label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().height(46.dp).tap(onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, Type.body, if (selected) t.ink else t.muted2, Modifier.weight(1f))
+        if (selected) Glyph(Ic.Check, t.accent, 17.dp)
+    }
+    Hair(t.hairSoft)
+}
+
+/** V1.4 #3 — ekspor / impor satu arsip ZIP lewat SAF, tanpa permission. */
+@Composable
+private fun CadanganPage(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    var status by remember { mutableStateOf("") }
+
+    val export = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri == null) {
+            status = "Ekspor dibatalkan."
+        } else {
+            status = Backup.export(ctx, uri, saku).fold(
+                onSuccess = { n -> "Backup tersimpan: ${saku.tx.size} transaksi, $n foto." },
+                onFailure = { "Gagal membuat backup: ${it.message}" }
+            )
+        }
+    }
+
+    val impor = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) {
+            status = "Pulihkan dibatalkan."
+        } else {
+            status = Backup.import(ctx, uri).fold(
+                onSuccess = { (data, n) ->
+                    onChange(data)
+                    "Pulihkan berhasil: ${data.tx.size} transaksi, $n foto."
+                },
+                onFailure = { "Arsip ditolak: ${it.message}" }
+            )
+        }
+    }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+        ScreenHeader(t, "Backup", back = true, onBack = onBack)
+        Spacer(Modifier.height(14.dp))
+        Text(
+            "Satu berkas ZIP berisi seluruh transaksi, kategori, target, pengaturan, " +
+                "dan foto. Simpan di Drive atau pindahkan ke HP lain, lalu pulihkan di sini.",
+            Type.micro,
+            t.muted2,
+            maxLines = 4
+        )
+
+        Spacer(Modifier.height(22.dp))
+        PrimaryButton("Buat backup", t) { export.launch(Backup.suggestedName()) }
+        Spacer(Modifier.height(8.dp))
+        SecondaryButton("Pulihkan dari backup", t) {
+            impor.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+        }
+
+        if (status.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text(status, Type.label, t.ink, maxLines = 3)
+        }
+
+        Spacer(Modifier.height(26.dp))
+        Text("Isi cadangan", Type.label, t.muted2)
+        Spacer(Modifier.height(6.dp))
+        Hair(t.hair)
+        InfoRow(t, "Transaksi", saku.tx.size.toString())
+        InfoRow(t, "Kategori", saku.cats.size.toString())
+        InfoRow(t, "Target nabung", saku.goals.size.toString())
         Spacer(Modifier.height(110.dp))
     }
 }

@@ -1,6 +1,22 @@
 package id.saku.app
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.NumberFormat
@@ -17,16 +33,43 @@ data class Tx(
     val amount: Long,      // selalu positif
     val cat: String,
     val note: String,
-    val goal: String = "",  // id target nabung, kalau transaksi ini setoran/penarikan
-    val photo: String = ""  // path berkas di filesDir/photos/, opsional (V1.3)
+    val goal: String = "",            // id target nabung, kalau transaksi ini setoran/penarikan
+    val photo: String = "",           // V1.3, path tunggal — tetap dibaca untuk data lama
+    val photos: List<String> = emptyList()   // V1.4 #7, beberapa lampiran
 ) {
     val signed: Long get() = if (type == "in") amount else -amount
+    /** Satu sumber kebenaran untuk foto: data lama (photo) maupun baru (photos). */
+    val allPhotos: List<String>
+        get() = photos.ifEmpty { listOfNotNull(photo.takeIf { it.isNotEmpty() }) }
 }
 
 /** Kategori dibedakan lewat glyph, bukan warna (DESIGN.md § Color aturan 2). */
 data class Cat(val id: String, val name: String, val glyph: String)
 
 data class Goal(val id: String, val name: String, val target: Long)
+
+/**
+ * Area yang bisa dipilih sendiri antara liquid glass dan kertas (V1.4 #8).
+ *
+ * PERBAIKAN CRASH 2026-11-18 — "Ringkasan Home" dikeluarkan dari daftar.
+ * Panel itu berada DI DALAM subtree yang direkam oleh `sakuLayerBackdrop`.
+ * `LayerBackdrop.drawBackdrop()` memanggil `drawLayer(graphicsLayer)` pada layer
+ * yang sedang merekam subtree itu; kalau `drawBackdrop` ikut terekam, display
+ * list memuat dirinya sendiri dan HWUI mengulang `RenderNode::prepareTreeImpl`
+ * sampai stack RenderThread habis (SIGSEGV, bukan exception Kotlin).
+ * Kaca hanya aman pada permukaan yang merupakan SAUDARA dari Box
+ * `layerBackdrop`: Dock, FAB, dan Sheet.
+ */
+val glassAreas = listOf(
+    "dock" to "Dock",
+    "fab" to "Tombol catat",
+    "sheet" to "Sheet"
+)
+
+private val glassKeys = glassAreas.map { it.first }.toSet()
+
+/** Buang preferensi area yang tidak lagi didukung (mis. `"home"` dari V1.4 awal). */
+fun Map<String, Boolean>.safeUiGlass(): Map<String, Boolean> = filterKeys { it in glassKeys }
 
 data class Saku(
     val tx: List<Tx> = emptyList(),
@@ -38,8 +81,25 @@ data class Saku(
     val customTone: String = "hijau",
     val chart: String = "batang",   // "batang" | "garis"
     val months: Int = 6,            // 6 | 12
-    val glass: Boolean = true       // dock & FAB liquid glass (V1.3), bisa dimatikan di Theme
+    val glass: Boolean = true,      // master Kertas/Kaca (V1.3)
+    val uiGlass: Map<String, Boolean> = emptyMap(),
+    val showNabungHome: Boolean = true,
+    val nabungScroll: Boolean = false,
+    val nabungPinned: String = ""
 )
+
+/**
+ * Default area kaca: dock + FAB menyala, sheet tetap kertas.
+ * Hard guard: area di luar `glassKeys` (terutama `"home"`) selalu mati, apa pun
+ * isi DataStore lama atau berkas backup — ini mencegah preferensi yang sudah
+ * terlanjur tersimpan menyalakan lagi jalur yang bikin crash.
+ */
+fun Saku.glassPref(area: String): Boolean {
+    if (area !in glassKeys) return false
+    return uiGlass[area] ?: (area == "dock" || area == "fab")
+}
+
+fun Saku.glassOn(area: String): Boolean = glass && glassPref(area)
 
 val glyphChoices = listOf("food", "car", "home", "bag", "film", "heart", "money", "wallet", "dot")
 
@@ -134,8 +194,25 @@ fun Saku.chartWindow(cursor: Calendar): List<Calendar> {
     }
 }
 
-fun Saku.trend(cursor: Calendar): List<Pair<Calendar, Long>> =
-    chartWindow(cursor).map { it to outcome(it) }
+/**
+ * V1.4 #1 — satu kali lintasan untuk seluruh batang, bukan `outcome()` per bulan
+ * yang menyaring seluruh daftar transaksi berulang kali tiap kali jari bergerak.
+ */
+fun Saku.trendFast(cursor: Calendar): List<Pair<Calendar, Long>> {
+    val totals = HashMap<String, Long>()
+    tx.forEach { t ->
+        if (t.type == "out" && t.date.length >= 7) {
+            val k = t.date.substring(0, 7)
+            totals[k] = (totals[k] ?: 0L) + t.amount
+        }
+    }
+    return chartWindow(cursor).map { c ->
+        val k = String.format(Locale.US, "%04d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1)
+        c to (totals[k] ?: 0L)
+    }
+}
+
+fun Saku.trend(cursor: Calendar): List<Pair<Calendar, Long>> = trendFast(cursor)
 
 fun sameMonth(a: Calendar, b: Calendar): Boolean =
     a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.MONTH) == b.get(Calendar.MONTH)
@@ -224,94 +301,296 @@ object Fmt {
             else -> digits.take(2) + ":" + digits.drop(2)
         }
     }
+
+    fun stamp(): String = SimpleDateFormat("yyyy-MM-dd-HHmm", Locale.US).format(Date())
 }
 
-class Store(ctx: Context) {
-    private val prefs = ctx.getSharedPreferences("saku", Context.MODE_PRIVATE)
+/* ---------------------------------------------------------------------------
+ * Serialisasi JSON portabel: dipakai migrasi dari SharedPreferences, backup ZIP,
+ * dan impor. Formatnya sengaja tetap kompatibel dengan berkas V1.3.
+ * ------------------------------------------------------------------------- */
+
+fun encodeTx(t: Tx): String = JSONObject().apply {
+    put("id", t.id); put("date", t.date); put("time", t.time)
+    put("type", t.type); put("amount", t.amount); put("cat", t.cat)
+    put("note", t.note); put("goal", t.goal)
+    if (t.photo.isNotEmpty()) put("photo", t.photo)
+    put("photos", JSONArray().apply { t.allPhotos.forEach { put(it) } })
+}.toString()
+
+fun decodeTx(raw: String): Tx = JSONObject(raw).let { t ->
+    Tx(
+        id = t.getString("id"),
+        date = t.optString("date", Fmt.iso(Date())),
+        time = t.optString("time", "12:00"),
+        type = t.optString("type", "out"),
+        amount = t.optLong("amount", 0L),
+        cat = t.optString("cat", "lain"),
+        note = t.optString("note", ""),
+        goal = t.optString("goal", ""),
+        photo = t.optString("photo", ""),
+        photos = t.optJSONArray("photos")?.let { a ->
+            (0 until a.length()).map { a.optString(it, "") }.filter { it.isNotEmpty() }
+        } ?: emptyList()
+    )
+}
+
+private fun encodeCats(list: List<Cat>): String = JSONArray().apply {
+    list.forEach { put(JSONObject().apply { put("id", it.id); put("name", it.name); put("glyph", it.glyph) }) }
+}.toString()
+
+private fun decodeCats(raw: String?): List<Cat> = try {
+    if (raw.isNullOrBlank()) defaultCats() else JSONArray(raw).let { a ->
+        (0 until a.length()).map { i ->
+            val c = a.getJSONObject(i)
+            Cat(c.getString("id"), c.optString("name", "Lainnya"), c.optString("glyph", "dot"))
+        }
+    }.takeIf { it.isNotEmpty() } ?: defaultCats()
+} catch (e: Exception) {
+    defaultCats()
+}
+
+private fun encodeGoals(list: List<Goal>): String = JSONArray().apply {
+    list.forEach { put(JSONObject().apply { put("id", it.id); put("name", it.name); put("target", it.target) }) }
+}.toString()
+
+private fun decodeGoals(raw: String?): List<Goal> = try {
+    if (raw.isNullOrBlank()) emptyList() else JSONArray(raw).let { a ->
+        (0 until a.length()).mapNotNull { i ->
+            runCatching {
+                val g = a.getJSONObject(i)
+                Goal(g.getString("id"), g.optString("name", ""), g.optLong("target"))
+            }.getOrNull()
+        }
+    }
+} catch (e: Exception) {
+    emptyList()
+}
+
+fun encodeSaku(s: Saku): String = JSONObject().apply {
+    put("v", 2)
+    put("tx", JSONArray().apply { s.tx.forEach { put(JSONObject(encodeTx(it))) } })
+    put("cats", JSONArray(encodeCats(s.cats)))
+    put("goals", JSONArray(encodeGoals(s.goals)))
+    put("dark", s.dark)
+    put("palette", s.paletteId)
+    put("accent", s.customAccent)
+    put("tone", s.customTone)
+    put("chart", s.chart)
+    put("months", s.months)
+    put("glass", s.glass)
+    put("ui", JSONObject().apply { s.uiGlass.forEach { (k, v) -> put(k, v) } })
+    put("showNabungHome", s.showNabungHome)
+    put("nabungScroll", s.nabungScroll)
+    put("nabungPinned", s.nabungPinned)
+}.toString()
+
+fun decodeSaku(raw: String): Saku = try {
+    val o = JSONObject(raw)
+    val tx = o.optJSONArray("tx")?.let { a ->
+        (0 until a.length()).mapNotNull { i -> runCatching { decodeTx(a.getJSONObject(i).toString()) }.getOrNull() }
+    }?.sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time }) ?: emptyList()
+    val ui = o.optJSONObject("ui")?.let { u ->
+        u.keys().asSequence().associateWith { u.optBoolean(it, false) }
+    } ?: emptyMap()
+    Saku(
+        tx = tx,
+        cats = decodeCats(o.optJSONArray("cats")?.toString()),
+        goals = decodeGoals(o.optJSONArray("goals")?.toString()),
+        dark = o.optBoolean("dark", true),
+        paletteId = o.optString("palette", "mono"),
+        customAccent = o.optLong("accent", 0xFF23418F),
+        customTone = o.optString("tone", "hijau"),
+        chart = o.optString("chart", "batang"),
+        months = if (o.optInt("months", 6) >= 12) 12 else 6,
+        glass = o.optBoolean("glass", true),
+        uiGlass = ui.safeUiGlass(),
+        showNabungHome = o.optBoolean("showNabungHome", true),
+        nabungScroll = o.optBoolean("nabungScroll", false),
+        nabungPinned = o.optString("nabungPinned", "")
+    )
+} catch (e: Exception) {
+    Saku()
+}
+
+/** Validasi ringan sebelum hasil impor dipakai (V1.4 #3). */
+fun Saku.isSane(): Boolean =
+    tx.size <= 100_000 && cats.isNotEmpty() && tx.all {
+        it.id.isNotBlank() && it.date.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) &&
+            it.time.matches(Regex("\\d{2}:\\d{2}")) && it.amount >= 0L
+    }
+
+/* ---------------------------------------------------------------------------
+ * V1.4 #5 — DataStore, bukan lagi satu string JSON di SharedPreferences.
+ * Tiap transaksi punya key sendiri, jadi `save()` hanya menulis record yang
+ * berubah. Data lama dimigrasikan sekali saat `load()` pertama kali.
+ * ------------------------------------------------------------------------- */
+
+private val Context.sakuDataStore: DataStore<Preferences> by preferencesDataStore(name = "saku_v2")
+
+private val K_IDS = stringSetPreferencesKey("tx_ids")
+private val K_CATS = stringPreferencesKey("cats")
+private val K_GOALS = stringPreferencesKey("goals")
+private val K_DARK = booleanPreferencesKey("dark")
+private val K_PALETTE = stringPreferencesKey("palette")
+private val K_ACCENT = longPreferencesKey("accent")
+private val K_TONE = stringPreferencesKey("tone")
+private val K_CHART = stringPreferencesKey("chart")
+private val K_MONTHS = intPreferencesKey("months")
+private val K_GLASS = booleanPreferencesKey("glass")
+private val K_UI = stringPreferencesKey("ui")
+private val K_SHOW_NABUNG = booleanPreferencesKey("showNabungHome")
+private val K_NABUNG_SCROLL = booleanPreferencesKey("nabungScroll")
+private val K_NABUNG_PINNED = stringPreferencesKey("nabungPinned")
+
+private fun txKey(id: String) = stringPreferencesKey("tx_" + id)
+
+private fun encodeUiGlass(s: Saku): String =
+    JSONObject().apply { s.uiGlass.safeUiGlass().forEach { (k, v) -> put(k, v) } }.toString()
+
+private fun writeAllInto(p: MutablePreferences, s: Saku) {
+    s.tx.forEach { p[txKey(it.id)] = encodeTx(it) }
+    p[K_IDS] = s.tx.map { it.id }.toSet()
+    p[K_CATS] = encodeCats(s.cats)
+    p[K_GOALS] = encodeGoals(s.goals)
+    p[K_DARK] = s.dark
+    p[K_PALETTE] = s.paletteId
+    p[K_ACCENT] = s.customAccent
+    p[K_TONE] = s.customTone
+    p[K_CHART] = s.chart
+    p[K_MONTHS] = s.months
+    p[K_GLASS] = s.glass
+    p[K_UI] = encodeUiGlass(s)
+    p[K_SHOW_NABUNG] = s.showNabungHome
+    p[K_NABUNG_SCROLL] = s.nabungScroll
+    p[K_NABUNG_PINNED] = s.nabungPinned
+}
+
+private fun decodePrefs(p: Preferences): Saku {
+    val ids = p[K_IDS] ?: emptySet()
+    val tx = ids.mapNotNull { id ->
+        p[txKey(id)]?.let { runCatching { decodeTx(it) }.getOrNull() }
+    }.sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time })
+    val ui = try {
+        JSONObject(p[K_UI] ?: "{}").let { u ->
+            u.keys().asSequence().associateWith { u.optBoolean(it, false) }
+        }
+    } catch (e: Exception) {
+        emptyMap()
+    }
+    return Saku(
+        tx = tx,
+        cats = decodeCats(p[K_CATS]),
+        goals = decodeGoals(p[K_GOALS]),
+        dark = p[K_DARK] ?: true,
+        paletteId = p[K_PALETTE] ?: "mono",
+        customAccent = p[K_ACCENT] ?: 0xFF23418F,
+        customTone = p[K_TONE] ?: "hijau",
+        chart = p[K_CHART] ?: "batang",
+        months = if ((p[K_MONTHS] ?: 6) >= 12) 12 else 6,
+        glass = p[K_GLASS] ?: true,
+        uiGlass = ui.safeUiGlass(),
+        showNabungHome = p[K_SHOW_NABUNG] ?: true,
+        nabungScroll = p[K_NABUNG_SCROLL] ?: false,
+        nabungPinned = p[K_NABUNG_PINNED] ?: ""
+    )
+}
+
+class Store(private val ctx: Context) {
+    private val ds: DataStore<Preferences> = ctx.sakuDataStore
+    private val legacy = ctx.getSharedPreferences("saku", Context.MODE_PRIVATE)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile
+    private var snapshot: Saku = Saku()
 
     /** Aplikasi mulai dari nol — tidak ada data contoh yang ditanam. */
     fun load(): Saku {
-        val raw = prefs.getString("db", null) ?: return Saku()
-        return try {
-            val o = JSONObject(raw)
-            val tx = o.optJSONArray("tx")?.let { a ->
-                (0 until a.length()).map { i ->
-                    val t = a.getJSONObject(i)
-                    Tx(
-                        id = t.getString("id"),
-                        date = t.getString("date"),
-                        time = t.optString("time", "12:00"),
-                        type = t.optString("type", "out"),
-                        amount = t.optLong("amount", 0L),
-                        cat = t.optString("cat", "lain"),
-                        note = t.optString("note", ""),
-                        goal = t.optString("goal", ""),
-                        photo = t.optString("photo", "")
-                    )
-                }
-            } ?: emptyList()
-            val cats = o.optJSONArray("cats")?.let { a ->
-                (0 until a.length()).map { i ->
-                    val c = a.getJSONObject(i)
-                    Cat(c.getString("id"), c.optString("name", "Lainnya"), c.optString("glyph", "dot"))
-                }
-            }?.takeIf { it.isNotEmpty() } ?: defaultCats()
-            val goals = o.optJSONArray("goals")?.let { a ->
-                (0 until a.length()).map { i ->
-                    val g = a.getJSONObject(i)
-                    Goal(g.getString("id"), g.optString("name", ""), g.optLong("target"))
-                }
-            } ?: emptyList()
-            Saku(
-                tx = tx,
-                cats = cats,
-                goals = goals,
-                dark = o.optBoolean("dark", true),
-                paletteId = o.optString("palette", "mono"),
-                customAccent = o.optLong("accent", 0xFF23418F),
-                customTone = o.optString("tone", "hijau"),
-                chart = o.optString("chart", "batang"),
-                months = if (o.optInt("months", 6) >= 12) 12 else 6,
-                glass = o.optBoolean("glass", true)
-            )
+        // Simpan nilai MENTAH K_UI sebelum decodePrefs menyaringnya, supaya
+        // perbandingan di bawah benar-benar mendeteksi kunci terlarang di disk.
+        var storedUi: String? = null
+        val decoded = try {
+            val p = runBlocking(Dispatchers.IO) { ds.data.first() }
+            storedUi = p[K_UI]
+            if (p.asMap().isEmpty()) {
+                val raw = legacy.getString("db", null)
+                val migrated = if (raw.isNullOrBlank()) Saku() else decodeSaku(raw)
+                runBlocking(Dispatchers.IO) { ds.edit { writeAllInto(it, migrated) } }
+                legacy.edit().remove("db").apply()
+                migrated
+            } else {
+                decodePrefs(p)
+            }
         } catch (e: Exception) {
-            Saku()
+            val raw = legacy.getString("db", null)
+            if (raw.isNullOrBlank()) Saku() else decodeSaku(raw)
+        }
+        val s = decoded.copy(uiGlass = decoded.uiGlass.safeUiGlass())
+        // Bersihkan DataStore yang masih menyimpan area terlarang ("home").
+        // Perangkat yang sudah telanjur memilih Kaca pada Ringkasan Home tidak
+        // boleh bisa menyalakan lagi jalur rekursif itu setelah update.
+        val cleanUi = encodeUiGlass(s)
+        if (storedUi != null && storedUi != cleanUi) {
+            scope.launch {
+                try {
+                    ds.edit { p -> p[K_UI] = cleanUi }
+                } catch (e: Exception) {
+                    // IO gagal tidak boleh menjatuhkan UI; guard glassPref tetap berlaku.
+                }
+            }
+        }
+        snapshot = s
+        return s
+    }
+
+    /** Menulis cuma record yang berubah — tidak lagi seluruh database. */
+    fun save(s: Saku) {
+        val prev = snapshot
+        snapshot = s
+        scope.launch {
+            try {
+                ds.edit { p -> applyDiff(p, prev, s) }
+            } catch (e: Exception) {
+                // Jangan biarkan kegagalan IO menjatuhkan UI; state di memori tetap benar.
+            }
         }
     }
 
-    fun save(s: Saku) {
-        val o = JSONObject()
-        o.put("tx", JSONArray().apply {
-            s.tx.forEach { t ->
-                put(JSONObject().apply {
-                    put("id", t.id); put("date", t.date); put("time", t.time)
-                    put("type", t.type); put("amount", t.amount); put("cat", t.cat); put("note", t.note)
-                    put("goal", t.goal); put("photo", t.photo)
-                })
+    /** Dipakai setelah restore: paksa tulis ulang seluruh key. */
+    fun replace(s: Saku) {
+        snapshot = s
+        scope.launch {
+            try {
+                ds.edit { p -> writeAllInto(p, s) }
+            } catch (e: Exception) {
             }
-        })
-        o.put("cats", JSONArray().apply {
-            s.cats.forEach { c ->
-                put(JSONObject().apply {
-                    put("id", c.id); put("name", c.name); put("glyph", c.glyph)
-                })
-            }
-        })
-        o.put("goals", JSONArray().apply {
-            s.goals.forEach { g ->
-                put(JSONObject().apply {
-                    put("id", g.id); put("name", g.name); put("target", g.target)
-                })
-            }
-        })
-        o.put("dark", s.dark)
-        o.put("palette", s.paletteId)
-        o.put("accent", s.customAccent)
-        o.put("tone", s.customTone)
-        o.put("chart", s.chart)
-        o.put("months", s.months)
-        o.put("glass", s.glass)
-        prefs.edit().putString("db", o.toString()).apply()
+        }
+    }
+
+    private fun applyDiff(p: MutablePreferences, prev: Saku, s: Saku) {
+        if (prev.tx != s.tx) {
+            val oldIds = prev.tx.map { it.id }.toSet()
+            val newIds = s.tx.map { it.id }.toSet()
+            (oldIds - newIds).forEach { p.remove(txKey(it)) }
+            val oldMap = prev.tx.associateBy { it.id }
+            s.tx.forEach { t -> if (oldMap[t.id] != t) p[txKey(t.id)] = encodeTx(t) }
+            p[K_IDS] = newIds
+        }
+        if (prev.cats != s.cats) p[K_CATS] = encodeCats(s.cats)
+        if (prev.goals != s.goals) p[K_GOALS] = encodeGoals(s.goals)
+        if (prev.dark != s.dark) p[K_DARK] = s.dark
+        if (prev.paletteId != s.paletteId) p[K_PALETTE] = s.paletteId
+        if (prev.customAccent != s.customAccent) p[K_ACCENT] = s.customAccent
+        if (prev.customTone != s.customTone) p[K_TONE] = s.customTone
+        if (prev.chart != s.chart) p[K_CHART] = s.chart
+        if (prev.months != s.months) p[K_MONTHS] = s.months
+        if (prev.glass != s.glass) p[K_GLASS] = s.glass
+        if (prev.uiGlass != s.uiGlass) {
+            p[K_UI] = encodeUiGlass(s)
+        }
+        if (prev.showNabungHome != s.showNabungHome) p[K_SHOW_NABUNG] = s.showNabungHome
+        if (prev.nabungScroll != s.nabungScroll) p[K_NABUNG_SCROLL] = s.nabungScroll
+        if (prev.nabungPinned != s.nabungPinned) p[K_NABUNG_PINNED] = s.nabungPinned
     }
 }
 

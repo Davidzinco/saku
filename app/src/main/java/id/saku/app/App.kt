@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +30,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -80,6 +83,9 @@ fun SakuApp() {
     var goalVisible by remember { mutableStateOf(false) }
     var detailTx by remember { mutableStateOf<Tx?>(null) }
     var detailVisible by remember { mutableStateOf(false) }
+    // V1.4 #6: setelah hapus, sheet tetap terbuka dengan konfirmasi.
+    var detailDeleted by remember { mutableStateOf(false) }
+    var detailNotice by remember { mutableStateOf("") }
     var flashId by remember { mutableStateOf<String?>(null) }
     // V1.3 #1: saat jari sedang scrub grafik, pager dimatikan supaya geseran
     // horizontal tidak pernah dibaca sebagai "pindah ke halaman Transaksi".
@@ -164,10 +170,14 @@ fun SakuApp() {
     fun openDetail(tx: Tx) {
         detailTx = tx
         detailVisible = true
+        detailDeleted = false
+        detailNotice = ""
     }
 
     fun closeDetailSheet() {
         detailVisible = false
+        detailDeleted = false
+        detailNotice = ""
         scope.launch {
             delay(200)
             detailTx = null
@@ -179,7 +189,21 @@ fun SakuApp() {
         selectTab(Tab.Home)
     }
 
+    // V1.4 #8: pilihan Kaca/Kertas per area dibagikan ke sheet (overlay).
+    CompositionLocalProvider(
+        LocalGlassUi provides GlassUi(
+            backdrop = backdrop,
+            sheet = saku.glassOn("sheet")
+        )
+    ) {
     Box(Modifier.fillMaxSize().background(t.bg)) {
+        // PERBAIKAN CRASH 2026-11-18: subtree yang direkam LayerBackdrop TIDAK
+        // boleh berisi satupun drawBackdrop. Kalau ada, display list memuat
+        // dirinya sendiri -> RenderNode::prepareTreeImpl rekursif -> SIGSEGV di
+        // RenderThread. Pengaman struktural: di sini backdrop sengaja diset null
+        // lewat CompositionLocal bertingkat, jadi komponen di dalam pager
+        // (Beranda, Transaksi, Nabung, Atur) mustahil memasang kaca.
+        CompositionLocalProvider(LocalGlassUi provides GlassUi()) {
         Box(Modifier.fillMaxSize().sakuLayerBackdrop(backdrop)) {
             HorizontalPager(
                 state = pager,
@@ -226,13 +250,14 @@ fun SakuApp() {
                 }
             }
         }
+        }
 
         Dock(
             t = t,
             current = tab,
             onTab = { selectTab(it) },
             backdrop = backdrop,
-            glass = saku.glass,
+            glass = saku.glassOn("dock"),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 22.dp)
@@ -240,7 +265,8 @@ fun SakuApp() {
         )
 
         // FAB tinggal di parent layar penuh supaya tetap bisa ditekan walau menonjol di atas dock.
-        val fabChrome = if (saku.glass) {
+        val fabGlass = saku.glassOn("fab")
+        val fabChrome = if (fabGlass) {
             Modifier.glassFab(t, backdrop)
         } else {
             Modifier.background(t.accent)
@@ -251,7 +277,7 @@ fun SakuApp() {
                 .padding(bottom = 51.dp)
                 .size(54.dp)
                 .shadow(
-                    elevation = if (saku.glass) 0.dp else 10.dp,
+                    elevation = if (fabGlass) 0.dp else 10.dp,
                     shape = CircleShape,
                     clip = false,
                     ambientColor = t.accent.copy(alpha = 0.40f),
@@ -275,9 +301,9 @@ fun SakuApp() {
                 visible = sheetVisible,
                 onDismiss = { closeTxSheet() },
                 onSave = { tx ->
-                    // foto lama dibuang kalau diganti/dihapus
-                    val oldPhoto = editing?.photo ?: ""
-                    if (oldPhoto.isNotEmpty() && oldPhoto != tx.photo) deletePhoto(oldPhoto)
+                    // V1.4 #7: buang hanya lampiran yang benar-benar dicopot.
+                    val kept = tx.allPhotos.toSet()
+                    deletePhotos((editing?.allPhotos ?: emptyList()).filter { it !in kept })
                     update(saku.withTx(tx))
                     flashId = tx.id
                     cursor = Calendar.getInstance().apply {
@@ -287,7 +313,7 @@ fun SakuApp() {
                     closeTxSheet()
                 },
                 onDelete = { id ->
-                    saku.tx.firstOrNull { it.id == id }?.let { deletePhoto(it.photo) }
+                    saku.tx.firstOrNull { it.id == id }?.let { deletePhotos(it.allPhotos) }
                     update(saku.withoutTx(id))
                     closeTxSheet()
                 }
@@ -304,6 +330,10 @@ fun SakuApp() {
                     saku = saku,
                     tx = d,
                     visible = detailVisible,
+                    index = saku.tx.indexOfFirst { it.id == d.id }.coerceAtLeast(0),
+                    total = saku.tx.size,
+                    deleted = detailDeleted,
+                    notice = detailNotice,
                     onDismiss = { closeDetailSheet() },
                     onEdit = { tx ->
                         closeDetailSheet()
@@ -313,10 +343,31 @@ fun SakuApp() {
                         }
                     },
                     onDelete = { id ->
-                        deletePhoto(d.photo)
+                        val ordered = saku.tx
+                        val at = ordered.indexOfFirst { it.id == id }
+                        deletePhotos(d.allPhotos)
                         update(saku.withoutTx(id))
-                        closeDetailSheet()
-                    }
+                        // Sheet sengaja TIDAK ditutup: pindah ke tetangga bila ada,
+                        // kalau tidak tampilkan konfirmasi + tombol Tutup.
+                        val neighbor = ordered.getOrNull(at + 1) ?: ordered.getOrNull(at - 1)
+                        detailNotice = "Transaksi dihapus"
+                        if (neighbor != null && neighbor.id != id) {
+                            detailTx = neighbor
+                            detailDeleted = false
+                        } else {
+                            detailDeleted = true
+                        }
+                    },
+                    onNavigate = { delta ->
+                        val ordered = saku.tx
+                        val at = ordered.indexOfFirst { it.id == d.id }
+                        ordered.getOrNull(at + delta)?.let {
+                            detailTx = it
+                            detailNotice = ""
+                            detailDeleted = false
+                        }
+                    },
+                    onDone = { closeDetailSheet() }
                 )
             }
         }
@@ -383,10 +434,11 @@ fun SakuApp() {
             null -> Unit
         }
     }
+    }
 }
 
 /**
- * Dock datar: satu lembar surface, garis rambut, satu wash aksen untuk tab aktif.
+ * Dock kapsul: satu lembar surface, garis rambut, satu wash aksen untuk tab aktif.
  * V1.3: sistem geser dipertahankan, tapi halaman baru dibuka SETELAH jari dilepas.
  * Saat `glass` aktif, permukaannya memakai resep liquid glass dari
  * Kyant0/AndroidLiquidGlass (vibrancy + blur + lens), dengan warna tetap dari [Tok].
@@ -408,12 +460,23 @@ fun Dock(
     // adalah restricted suspension scope, jadi Animatable.snapTo() tidak boleh dipanggil
     // langsung dari dalam pointerInput.
     var dragX by remember { mutableStateOf(0f) }
+    // V1.4 #4: selama jari menahan, dock membesar sedikit lalu kembali saat lepas.
+    var pressed by remember { mutableStateOf(false) }
+    val grow by animateFloatAsState(
+        targetValue = if (pressed) 1.045f else 1f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 420f),
+        label = "dockHold"
+    )
     val shape = dockShape()
 
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
             .height(66.dp)
+            .graphicsLayer {
+                scaleX = grow
+                scaleY = grow
+            }
             .then(
                 if (glass) {
                     Modifier.glassDock(t, backdrop, shape)
@@ -501,41 +564,46 @@ fun Dock(
                 .pointerInput(slotPx, centerPx) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        var moved = false
-                        var acc = 0f
-                        var lastX = down.position.x
-                        dragX = wash.value
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-                            val dx = change.position.x - lastX
-                            lastX = change.position.x
-                            acc += dx
-                            if (!moved && abs(acc) > viewConfiguration.touchSlop) {
-                                moved = true
-                                dragging = true
+                        pressed = true
+                        try {
+                            var moved = false
+                            var acc = 0f
+                            var lastX = down.position.x
+                            dragX = wash.value
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                val dx = change.position.x - lastX
+                                lastX = change.position.x
+                                acc += dx
+                                if (!moved && abs(acc) > viewConfiguration.touchSlop) {
+                                    moved = true
+                                    dragging = true
+                                }
+                                if (moved) {
+                                    change.consume()
+                                    // Wash mengikuti jari lewat state; halaman TIDAK dibuka
+                                    // selama jari masih menahan (V1.3 #2).
+                                    dragX = (dragX + dx).coerceIn(0f, startOf(3))
+                                }
                             }
                             if (moved) {
-                                change.consume()
-                                // Wash mengikuti jari lewat state; halaman TIDAK dibuka
-                                // selama jari masih menahan (V1.3 #2).
-                                dragX = (dragX + dx).coerceIn(0f, startOf(3))
+                                val released = dragX
+                                val target = Tab.entries[indexAt(lastX)]
+                                // snapTo butuh suspend biasa, jadi dijalankan di coroutine
+                                // sebelum state dilepas; LaunchedEffect lalu menypring ke slot.
+                                scope.launch {
+                                    wash.snapTo(released)
+                                    snapNext = true
+                                    dragging = false
+                                    onTab(target)
+                                }
+                            } else {
+                                onTab(Tab.entries[indexAt(down.position.x)])
                             }
-                        }
-                        if (moved) {
-                            val released = dragX
-                            val target = Tab.entries[indexAt(lastX)]
-                            // snapTo butuh suspend biasa, jadi dijalankan di coroutine
-                            // sebelum state dilepas; LaunchedEffect lalu menypring ke slot.
-                            scope.launch {
-                                wash.snapTo(released)
-                                snapNext = true
-                                dragging = false
-                                onTab(target)
-                            }
-                        } else {
-                            onTab(Tab.entries[indexAt(down.position.x)])
+                        } finally {
+                            pressed = false
                         }
                     }
                 }

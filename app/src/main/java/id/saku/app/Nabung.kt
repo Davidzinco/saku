@@ -56,7 +56,7 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onSheet: (GoalSheet) ->
 
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
-            Stat(t, "Saldo akhir", Fmt.rp(saku.balance()), t.ink)
+            Stat(t, "Saldo", Fmt.rp(saku.balance()), t.ink)
             Stat(t, "Setoran bulan ini", Fmt.sign(thisMonth), if (thisMonth > 0) t.pos else t.ink)
         }
 

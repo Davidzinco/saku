@@ -5,6 +5,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -21,6 +22,27 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
+
+/**
+ * V1.4 #8 — konfigurasi kaca per area dibagikan lewat CompositionLocal supaya
+ * SheetScaffold bisa memutuskan sendiri mau kaca atau kertas, tanpa perlu
+ * meneruskan backdrop lewat setiap signature.
+ *
+ * ATURAN KERAS (perbaikan crash 2026-11-18): `backdrop` hanya boleh dibaca oleh
+ * komponen yang merupakan SAUDARA dari Box `sakuLayerBackdrop`, bukan turunannya.
+ * `LayerBackdrop` merekam subtree itu ke `graphicsLayer`, sementara
+ * `drawBackdrop` memanggil `drawLayer()` pada `graphicsLayer` yang sama. Kalau
+ * keduanya berada dalam satu subtree, display list mereferensi dirinya sendiri
+ * dan HWUI mengulang `RenderNode::prepareTreeImpl` sampai RenderThread stack
+ * overflow (SIGSEGV). Karena itu `App.kt` sengaja menyediakan `GlassUi()`
+ * (backdrop = null) di dalam subtree pager sebagai pengaman struktural.
+ */
+data class GlassUi(
+    val backdrop: Backdrop? = null,
+    val sheet: Boolean = false
+)
+
+val LocalGlassUi = staticCompositionLocalOf { GlassUi() }
 
 /**
  * Liquid Glass dari Kyant0/AndroidLiquidGlass (Backdrop 2.0.1), disesuaikan untuk Saku.
@@ -88,5 +110,25 @@ fun Modifier.glassWash(t: Tok, backdrop: Backdrop, shape: Shape): Modifier =
         onDrawSurface = { drawRect(t.accentWash) }
     )
 
-fun dockShape(): RoundedCornerShape = RoundedCornerShape(22.dp)
-fun washShape(): RoundedCornerShape = RoundedCornerShape(14.dp)
+/**
+ * V1.4 #8 — permukaan kaca generik. AMAN hanya untuk sheet, yang dirender
+ * sebagai saudara dari Box `sakuLayerBackdrop` (bukan di dalamnya).
+ */
+fun Modifier.glassPanel(t: Tok, backdrop: Backdrop, shape: Shape, wash: Color = t.sheet): Modifier =
+    this.drawBackdrop(
+        backdrop = backdrop,
+        shape = { shape },
+        effects = {
+            vibrancy()
+            blur(5f.dp.toPx())
+            lens(9f.dp.toPx(), 9f.dp.toPx())
+        },
+        highlight = { Highlight.Default },
+        shadow = { Shadow(alpha = 0.45f, color = t.ink.copy(alpha = 0.12f)) },
+        innerShadow = { InnerShadow(radius = 6f.dp, alpha = 0.22f) },
+        onDrawSurface = { drawRect(wash.copy(alpha = 0.72f)) }
+    )
+
+/** V1.4 #4 — dock dan wash jadi kapsul penuh, bukan persegi dengan sudut 22dp. */
+fun dockShape(): RoundedCornerShape = RoundedCornerShape(50)
+fun washShape(): RoundedCornerShape = RoundedCornerShape(50)

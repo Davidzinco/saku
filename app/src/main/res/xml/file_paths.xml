@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <files-path name="photos" path="photos/" />
+    <!-- V1.4 #11: berkas mentah kamera sebelum dikompres ke WebP -->
+    <cache-path name="camera" path="." />
 </paths>

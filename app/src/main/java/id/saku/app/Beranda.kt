@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -74,17 +77,12 @@ fun Beranda(
     val running = saku.runningBalances(cursor, rows)
 
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        // V1.4 #9: label "Lembar [date]" dihapus. Wordmark saja sudah cukup.
         Row(
             Modifier.fillMaxWidth().padding(top = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("SAKU", Type.wordmark, t.ink)
-            Spacer(Modifier.weight(1f))
-            Text(
-                "Lembar ${cursor.get(Calendar.MONTH) + 1} / ${cursor.get(Calendar.YEAR)}",
-                Type.micro,
-                t.muted2
-            )
         }
 
         SaldoBlock(t, saku.balance(), saku.income(cursor), saku.outcome(cursor), fontScale)
@@ -123,8 +121,16 @@ fun animatedLong(target: Long, duration: Int = 420): Long {
 @Composable
 private fun SaldoBlock(t: Tok, saldo: Long, income: Long, outcome: Long, fontScale: Float) {
     val shownSaldo = animatedLong(saldo)
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 11.dp)) {
-        Text("Saldo akhir", Type.label, t.muted2)
+    // V1.4 #9: label "Saldo akhir" dihapus.
+    // PERBAIKAN CRASH 2026-11-18: ringkasan ini sengaja TIDAK memakai kaca.
+    // Ia berada di dalam subtree `sakuLayerBackdrop`; memasang `drawBackdrop`
+    // di sini membuat display list mereferensi dirinya sendiri dan RenderThread
+    // stack overflow (SIGSEGV). Kaca hanya untuk overlay: Dock / FAB / Sheet.
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 11.dp)
+    ) {
         Row(Modifier.padding(top = 3.dp)) {
             Text("Rp", Type.currency, t.muted2, Modifier.alignByBaseline())
             Spacer(Modifier.width(9.dp))
@@ -191,9 +197,12 @@ private fun TrendSection(
     onScrub: (Boolean) -> Unit
 ) {
     val scale = motionScale()
-    val data = saku.trend(cursor)
+    // V1.4 #1: jendela grafik hanya berubah saat tahun/paruh tahun berganti, bukan
+    // tiap kali jari bergerak. `trendFast()` juga cuma menyaring transaksi sekali.
+    val windowKey = cursor.get(Calendar.YEAR) * 100 +
+        (if (saku.months >= 12) 0 else if (cursor.get(Calendar.MONTH) <= 5) 0 else 6)
+    val data = remember(saku, windowKey) { saku.trendFast(cursor) }
     val max = (data.maxOfOrNull { it.second } ?: 0L).coerceAtLeast(1L)
-    val peak = data.maxByOrNull { it.second }
     val activeIndex = data.indexOfFirst { sameMonth(it.first, cursor) }.coerceAtLeast(0)
     val many = data.size > 6
     val gap = if (many) 4.dp else 14.dp
@@ -308,55 +317,8 @@ private fun TrendSection(
             }
         }
 
-        Spacer(Modifier.height(4.dp))
-        ScrubStrip(t, data, activeIndex, scrub)
-        Spacer(Modifier.height(2.dp))
-
-        val caption = if (peak != null && peak.second > 0L) "Tertinggi " + Fmt.monthName(peak.first) else
-            "Belum ada pengeluaran di rentang ini"
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(caption, Type.micro, t.muted2)
-            if (peak != null && peak.second > 0L) {
-                Text(", ", Type.micro, t.muted2)
-                Text(Fmt.rp(peak.second), Type.micro.copy(fontWeight = FontWeight.SemiBold), t.muted2)
-            }
-            Spacer(Modifier.weight(1f))
-            Text("tahan & geser", Type.micro, t.faint)
-        }
-    }
-}
-
-/**
- * Ruang geser khusus (V1.3 #1): track 1dp + penggaris aksen yang mengikuti bulan
- * aktif. 26dp ini sengaja dikosongkan dari konten lain agar jari punya area aman.
- */
-@Composable
-private fun ScrubStrip(
-    t: Tok,
-    data: List<Pair<Calendar, Long>>,
-    activeIndex: Int,
-    scrub: Modifier
-) {
-    val frac = if (data.size > 1) {
-        (activeIndex + 0.5f) / data.size.toFloat()
-    } else {
-        0.5f
-    }
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(26.dp)
-            .then(scrub)
-            .semantics { contentDescription = "Tahan dan geser untuk memilih bulan" },
-        contentAlignment = Alignment.Center
-    ) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(t.hair))
-        Box(
-            Modifier.fillMaxWidth(frac.coerceIn(0.02f, 1f)).height(26.dp),
-            contentAlignment = Alignment.CenterEnd
-        ) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(t.accent))
-        }
+        // V1.4 #1/#9: strip slider 26dp, caption "Tertinggi …", dan petunjuk
+        // "tahan & geser" dihapus. Grafiknya sendiri adalah ruang gestur.
     }
 }
 
@@ -493,43 +455,84 @@ private fun CatSection(t: Tok, saku: Saku, cursor: Calendar, onCatat: () -> Unit
     }
 }
 
+/**
+ * V1.4 #10 — tampilan Nabung di Home punya opsi sendiri:
+ * tampil/sembunyi, ikut bergulir bersama target lain, dan target yang di-pin.
+ */
 @Composable
 private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
-    val goal = saku.goals.maxByOrNull { saku.savedOf(it.id) }
+    if (!saku.showNabungHome) return
+    val goals = saku.goals
+    val pinned = saku.goalOf(saku.nabungPinned) ?: goals.maxByOrNull { saku.savedOf(it.id) }
+
     Column(Modifier.fillMaxWidth().topHair(t.hairSoft).padding(vertical = 10.dp)) {
-        Row(Modifier.fillMaxWidth().tap(onNabung), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(26.dp).clip(RoundedCornerShape(9.dp)).background(t.accentWash),
-                contentAlignment = Alignment.Center
+        if (saku.nabungScroll && goals.isNotEmpty()) {
+            LazyRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Glyph(Ic.Wallet, t.accent, 15.dp)
+                items(goals, key = { it.id }) { g ->
+                    GoalChip(t, saku, g, onNabung)
+                }
             }
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f)) {
-                if (goal == null) {
-                    Text("Nabung", Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
-                    Text(
-                        "Belum ada target. Buat yang pertama.",
-                        Type.micro,
-                        t.muted2,
-                        Modifier.padding(top = 2.dp)
-                    )
-                } else {
-                    val saved = saku.savedOf(goal.id)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        } else {
+            Row(Modifier.fillMaxWidth().tap(onNabung), verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(26.dp).clip(RoundedCornerShape(9.dp)).background(t.accentWash),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Glyph(Ic.Wallet, t.accent, 15.dp)
+                }
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    if (pinned == null) {
+                        Text("Nabung", Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
                         Text(
-                            goal.name,
-                            Type.bodySm.copy(fontWeight = FontWeight.SemiBold),
-                            t.ink,
-                            Modifier.weight(1f)
+                            "Belum ada target. Buat yang pertama.",
+                            Type.micro,
+                            t.muted2,
+                            Modifier.padding(top = 2.dp)
                         )
-                        Text(Fmt.num(saved) + " / " + Fmt.num(goal.target), Type.figure, t.muted2)
+                    } else {
+                        val saved = saku.savedOf(pinned.id)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            if (saku.nabungPinned.isNotEmpty()) {
+                                Glyph(Ic.Pin, t.accent, 12.dp, 1.4.dp)
+                                Spacer(Modifier.width(5.dp))
+                            }
+                            Text(
+                                pinned.name,
+                                Type.bodySm.copy(fontWeight = FontWeight.SemiBold),
+                                t.ink,
+                                Modifier.weight(1f)
+                            )
+                            Text(Fmt.num(saved) + " / " + Fmt.num(pinned.target), Type.figure, t.muted2)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Track(t, if (pinned.target > 0) saved.toFloat() / pinned.target.toFloat() else 0f)
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Track(t, if (goal.target > 0) saved.toFloat() / goal.target.toFloat() else 0f)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GoalChip(t: Tok, saku: Saku, goal: Goal, onNabung: () -> Unit) {
+    val saved = saku.savedOf(goal.id)
+    Column(
+        Modifier
+            .width(186.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, t.hairSoft, RoundedCornerShape(12.dp))
+            .tap(onNabung)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Text(goal.name, Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
+        Spacer(Modifier.height(7.dp))
+        Track(t, if (goal.target > 0) saved.toFloat() / goal.target.toFloat() else 0f)
+        Spacer(Modifier.height(6.dp))
+        Text(Fmt.num(saved) + " / " + Fmt.num(goal.target), Type.micro, t.muted2)
     }
 }
 
@@ -555,47 +558,41 @@ private fun ListSection(
         TableHead(t)
 
         val listState = rememberLazyListState()
-        val firstId = rows.firstOrNull()?.id
-        LaunchedEffect(firstId) { listState.scrollToItem(0) }
+        val monthKey = cursor.get(Calendar.YEAR) * 100 + cursor.get(Calendar.MONTH)
+        LaunchedEffect(monthKey) { listState.scrollToItem(0) }
 
-        // animasi saat ganti bulan: daftar memudar masuk
-        AnimatedContent(
-            targetState = cursor.get(Calendar.YEAR) * 100 + cursor.get(Calendar.MONTH),
-            transitionSpec = {
-                fadeIn(tween(240, delayMillis = 60)) togetherWith fadeOut(tween(120))
-            },
-            modifier = Modifier.weight(1f)
-        ) { _ ->
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                state = listState,
-                contentPadding = PaddingValues(bottom = 104.dp)
-            ) {
-                if (rows.isEmpty()) {
-                    item {
-                        Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 26.dp)) {
-                            Text("Belum ada transaksi bulan ini.", Type.body, t.ink)
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "Catat yang pertama.",
-                                Type.label.copy(fontWeight = FontWeight.SemiBold),
-                                t.accent,
-                                Modifier.tap(onCatat)
-                            )
-                        }
+        // V1.4 #1: LazyColumn dibuat sekali saja. Dulu AnimatedContent yang berganti
+        // kunci setiap bulan membuat seluruh daftar dibongkar — transaksi sempat
+        // kosong dan gerakan scrub terasa ngelag. Animasi masuk kini per baris.
+        LazyColumn(
+            Modifier.fillMaxWidth().weight(1f),
+            state = listState,
+            contentPadding = PaddingValues(bottom = 104.dp)
+        ) {
+            if (rows.isEmpty()) {
+                item {
+                    Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 26.dp)) {
+                        Text("Belum ada transaksi bulan ini.", Type.body, t.ink)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Catat yang pertama.",
+                            Type.label.copy(fontWeight = FontWeight.SemiBold),
+                            t.accent,
+                            Modifier.tap(onCatat)
+                        )
                     }
                 }
-                itemsIndexed(rows, key = { _, tx -> tx.id }) { i, tx ->
-                    Box(Modifier.animateItem().rowEnter(i)) {
-                        TxRow(
-                            t = t,
-                            saku = saku,
-                            tx = tx,
-                            saldo = running.getOrElse(i) { 0L },
-                            newest = i == 0,
-                            flash = tx.id == flashId
-                        ) { onOpen(tx) }
-                    }
+            }
+            itemsIndexed(rows, key = { _, tx -> tx.id }) { i, tx ->
+                Box(Modifier.animateItem().rowEnter(i, monthKey)) {
+                    TxRow(
+                        t = t,
+                        saku = saku,
+                        tx = tx,
+                        saldo = running.getOrElse(i) { 0L },
+                        newest = i == 0,
+                        flash = tx.id == flashId
+                    ) { onOpen(tx) }
                 }
             }
         }

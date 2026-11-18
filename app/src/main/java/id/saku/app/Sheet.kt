@@ -2,6 +2,8 @@ package id.saku.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,7 +65,11 @@ fun TxSheet(
     var touched by remember { mutableStateOf(false) }
     var wasFocused by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
-    var photo by remember { mutableStateOf(initial?.photo ?: "") }
+    // V1.4 #7: beberapa lampiran, maksimal 6 per transaksi.
+    var photos by remember { mutableStateOf(initial?.allPhotos ?: emptyList<String>()) }
+    val picker = rememberPhotoActions { path ->
+        if (photos.size < 6) photos = photos + path
+    }
 
     val focus = LocalFocusManager.current
     val amount = digits.toLongOrNull() ?: 0L
@@ -92,7 +98,7 @@ fun TxSheet(
                         cat = cat,
                         note = note.trim(),
                         goal = initial?.goal ?: "",
-                        photo = photo
+                        photos = photos
                     )
                 )
             }
@@ -180,11 +186,17 @@ fun TxSheet(
                 t = t,
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
+            // V1.4 #7/#9: aksi foto jadi ikon di dalam Note, tanpa label dan
+            // tanpa teks "Opsional. Lampirkan struk …".
+            PhotoNoteIcons(t, picker)
         }
-        Spacer(Modifier.height(16.dp))
-
-        // Foto pada catatan (V1.3 #7)
-        PhotoField(t, photo) { photo = it }
+        if (photos.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            PhotoStrip(t, photos) { path ->
+                deletePhoto(path)
+                photos = photos - path
+            }
+        }
         Spacer(Modifier.height(16.dp))
 
         // Tanggal
@@ -223,9 +235,19 @@ fun TxSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        // Jam — V1.3 #5: field ringkas + stepper + preset, bukan dua track geser.
-        // Collapsed by default supaya sheet tidak memakan setengah layar.
-        TimeField(t, hour, minute, { hour = it }, { minute = it })
+        // V1.4 #2 — Time Input sesuai design/time.webp: field ringkas berikon jam,
+        // clear-time, dan popover tiga kolom (jam / menit / AM-PM) dengan interval.
+        TimeInput(
+            t = t,
+            hour = hour,
+            minute = minute,
+            onTime = { h, m -> hour = h; minute = m },
+            onClear = {
+                val now = Fmt.nowTime()
+                hour = now.substringBefore(":").toIntOrNull() ?: 12
+                minute = now.substringAfter(":").toIntOrNull() ?: 0
+            }
+        )
 
         if (initial?.goal?.isNotEmpty() == true) {
             Text(
@@ -409,119 +431,175 @@ fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
 }
 
 /**
- * V1.3 #5 — pengganti dua Scrubber. Satu field 48dp yang bisa dibuka, lalu stepper
- * jam/menit (ketuk, presisi 1 angka) dan 4 preset waktu. Tidak ada keyboard,
- * jadi tidak ada inset IME yang mengangkat sheet.
+ * V1.4 #2 — Time Input mengikuti `design/time.webp`:
+ * - satu field 48dp: contextual prefix (ikon jam), nilai `hh:mm` / `hh:mm aa`,
+ *   clear-time (×) dan chevron pembuka popover;
+ * - popover tiga kolom dengan configured intervals (jam, menit tiap 5 menit,
+ *   AM/PM), selected segments disorot aksen;
+ * - format 12/24 jam + preset pagi/siang/sore/malam.
+ * Tidak ada keyboard, jadi tidak ada inset IME yang mengangkat sheet.
  */
 @Composable
-private fun TimeField(
+private fun TimeInput(
     t: Tok,
     hour: Int,
     minute: Int,
-    onHour: (Int) -> Unit,
-    onMinute: (Int) -> Unit
+    onTime: (Int, Int) -> Unit,
+    onClear: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var use12 by remember { mutableStateOf(false) }
+    val h12 = if (hour % 12 == 0) 12 else hour % 12
+    val isAm = hour < 12
+    val shown = if (use12) {
+        pad2(h12) + ":" + pad2(minute) + " " + (if (isAm) "AM" else "PM")
+    } else {
+        pad2(hour) + ":" + pad2(minute)
+    }
 
     Text("Time", Type.label, t.muted2)
     Spacer(Modifier.height(6.dp))
     FieldShell(t) {
+        Glyph(Ic.Clock, t.muted2, 16.dp)
+        Spacer(Modifier.width(9.dp))
         Box(
-            Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .tap { expanded = !expanded },
+            Modifier.weight(1f).fillMaxHeight().tap { expanded = !expanded },
             contentAlignment = Alignment.CenterStart
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    pad2(hour) + ":" + pad2(minute),
-                    Type.bodySm.copy(fontWeight = FontWeight.SemiBold),
-                    t.ink
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(dayPart(hour), Type.micro, t.muted2)
+            Text(shown, Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
+        }
+        TouchTarget {
+            Box(Modifier.fillMaxSize().tap(onClear), contentAlignment = Alignment.Center) {
+                Glyph(Ic.Close, t.muted2, 14.dp)
             }
         }
         TouchTarget {
             Box(
                 Modifier.fillMaxSize().tap { expanded = !expanded },
                 contentAlignment = Alignment.Center
-            ) {
-                Glyph(if (expanded) Ic.Up else Ic.Down, t.muted2, 16.dp)
-            }
+            ) { Glyph(if (expanded) Ic.Up else Ic.Down, t.muted2, 16.dp) }
         }
     }
 
-    if (expanded) {
-        Spacer(Modifier.height(8.dp))
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(t.bg)
-                .border(1.dp, t.hair, RoundedCornerShape(10.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Stepper(
-                    "Jam", pad2(hour), t, Modifier.weight(1f),
-                    { onHour((hour - 1 + 24) % 24) },
-                    { onHour((hour + 1) % 24) }
-                )
-                Spacer(Modifier.width(8.dp))
-                Stepper(
-                    "Menit", pad2(minute), t, Modifier.weight(1f),
-                    { onMinute((minute - 1 + 60) % 60) },
-                    { onMinute((minute + 1) % 60) }
-                )
+    if (!expanded) return
+
+    val hourValues = if (use12) (1..12).toList() else (0..23).toList()
+    val minuteValues = remember(minute) { (minuteIntervals + minute).distinct().sorted() }
+    Spacer(Modifier.height(8.dp))
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, t.hair, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Format", Type.micro, t.muted2, Modifier.weight(1f))
+            listOf("24 jam", "12 jam").forEachIndexed { i, label ->
+                val on = (i == 1) == use12
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (on) t.accentWash else Color.Transparent)
+                        .tap { use12 = i == 1 }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) { Text(label, Type.micro, if (on) t.accent else t.muted) }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                listOf(8, 12, 17, 20).forEach { h ->
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .height(34.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, t.hair, RoundedCornerShape(8.dp))
-                            .tap { onHour(h); onMinute(0) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(dayPart(h), Type.micro, t.muted)
-                    }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth().height(148.dp)) {
+            TimeColumn(
+                label = "Jam",
+                values = hourValues,
+                selected = if (use12) h12 else hour,
+                t = t,
+                modifier = Modifier.weight(1f),
+                display = { pad2(it) }
+            ) { v ->
+                val h = if (!use12) v else {
+                    val base = if (v == 12) 0 else v
+                    if (isAm) base else base + 12
                 }
+                onTime(h.coerceIn(0, 23), minute)
+            }
+            TimeColumn(
+                label = "Menit",
+                values = minuteValues,
+                selected = minute,
+                t = t,
+                modifier = Modifier.weight(1f),
+                display = { pad2(it) }
+            ) { onTime(hour, it) }
+            if (use12) {
+                TimeColumn(
+                    label = "",
+                    values = listOf(0, 1),
+                    selected = if (isAm) 0 else 1,
+                    t = t,
+                    modifier = Modifier.weight(1f),
+                    display = { if (it == 0) "AM" else "PM" }
+                ) { v ->
+                    val h = if (v == 0) hour % 12 else (hour % 12) + 12
+                    onTime(h.coerceIn(0, 23), minute)
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(8, 12, 17, 20).forEach { h ->
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, t.hair, RoundedCornerShape(8.dp))
+                        .tap { onTime(h, 0); expanded = false },
+                    contentAlignment = Alignment.Center
+                ) { Text(dayPart(h), Type.micro, t.muted) }
             }
         }
     }
 }
 
+private val minuteIntervals: List<Int> = (0..55 step 5).toList()
+
 @Composable
-private fun Stepper(
+private fun TimeColumn(
     label: String,
-    value: String,
+    values: List<Int>,
+    selected: Int,
     t: Tok,
     modifier: Modifier,
-    onMinus: () -> Unit,
-    onPlus: () -> Unit
+    display: (Int) -> String,
+    onPick: (Int) -> Unit
 ) {
-    Row(modifier.height(44.dp), verticalAlignment = Alignment.CenterVertically) {
-        TouchTarget {
-            Box(Modifier.fillMaxSize().tap(onMinus), contentAlignment = Alignment.Center) {
-                Glyph(Ic.Minus, t.muted2, 16.dp)
-            }
+    Column(
+        modifier.fillMaxHeight().verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (label.isNotEmpty()) {
+            Text(label, Type.micro, t.muted2, Modifier.padding(vertical = 4.dp))
+        } else {
+            Spacer(Modifier.height(4.dp))
         }
-        Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, Type.micro, t.muted2)
-            Text(value, Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
-        }
-        TouchTarget {
-            Box(Modifier.fillMaxSize().tap(onPlus), contentAlignment = Alignment.Center) {
-                Glyph(Ic.Plus, t.muted2, 16.dp)
+        values.forEach { v ->
+            val on = v == selected
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (on) t.accent else Color.Transparent)
+                    .tap { onPick(v) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    display(v),
+                    Type.bodySm.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                    if (on) (if (t.dark) t.bg else Color.White) else t.ink
+                )
             }
+            Spacer(Modifier.height(2.dp))
         }
     }
 }

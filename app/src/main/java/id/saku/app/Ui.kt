@@ -134,10 +134,12 @@ fun Modifier.pressable(onClick: () -> Unit): Modifier {
  * berurutan, bukan muncul serentak. `motionScale() == 0` langsung snap ke 1.
  */
 @Composable
-fun Modifier.rowEnter(index: Int): Modifier {
+fun Modifier.rowEnter(index: Int, resetKey: Any = Unit): Modifier {
     val scale = motionScale()
     val anim = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
+    // V1.4 #1: animasi baris diulang saat bulan berubah, tapi LazyColumn tidak
+    // dibongkar-pasang (dulu AnimatedContent bikin daftar sempat kosong / ngelag).
+    LaunchedEffect(resetKey) {
         if (scale <= 0f) {
             anim.snapTo(1f)
         } else {
@@ -213,7 +215,9 @@ fun Track(t: Tok, frac: Float, height: Dp = 4.dp, color: Color = t.pos) {
 enum class Ic {
     Home, Receipt, Wallet, Sliders,
     Plus, Minus, Close, ChevL, ChevR, Check, Up, Down, Trash, Pencil,
-    Food, Car, Bag, Film, Heart, Money, Dot, Palette, Chart, Tag
+    Food, Car, Bag, Film, Heart, Money, Dot, Palette, Chart, Tag,
+    // V1.4: Time Input, foto, backup, dan pin nabung
+    Clock, Camera, Image, Backup, Restore, Pin
 }
 
 fun glyphOf(name: String): Ic = when (name) {
@@ -404,6 +408,46 @@ fun Glyph(ic: Ic, tint: Color, box: Dp = 20.dp, stroke: Dp = 1.5.dp) {
                 circle(5f, 10f, 1.3f, filled = true)
                 circle(10f, 10f, 1.3f, filled = true)
                 circle(15f, 10f, 1.3f, filled = true)
+            }
+
+            Ic.Clock -> {
+                circle(10f, 10f, 7.2f)
+                line(10f, 5.4f, 10f, 10.2f)
+                line(10f, 10.2f, 13.2f, 12.2f)
+            }
+
+            Ic.Camera -> {
+                rect(2.6f, 6.2f, 14.8f, 10f, 2f)
+                rect(7f, 4.4f, 4f, 1.8f, 0.8f)
+                circle(10f, 11.2f, 3f)
+                circle(15.2f, 8.4f, 0.8f, filled = true)
+            }
+
+            Ic.Image -> {
+                rect(3f, 4.4f, 14f, 11.2f, 1.6f)
+                circle(7.2f, 8.2f, 1.3f)
+                path {
+                    moveTo(3.6f * s, 14.4f * s); lineTo(8f * s, 10f * s)
+                    lineTo(11f * s, 13f * s); lineTo(14.4f * s, 9.8f * s)
+                    lineTo(16.4f * s, 11.6f * s)
+                }
+            }
+
+            Ic.Backup -> {
+                rect(3.4f, 12.6f, 13.2f, 3.8f, 1.4f)
+                line(10f, 3.4f, 10f, 11.6f)
+                path { moveTo(6.8f * s, 6.6f * s); lineTo(10f * s, 3.4f * s); lineTo(13.2f * s, 6.6f * s) }
+            }
+
+            Ic.Restore -> {
+                rect(3.4f, 3.6f, 13.2f, 3.8f, 1.4f)
+                line(10f, 7.8f, 10f, 16.4f)
+                path { moveTo(6.8f * s, 13.2f * s); lineTo(10f * s, 16.4f * s); lineTo(13.2f * s, 13.2f * s) }
+            }
+
+            Ic.Pin -> {
+                circle(10f, 7.6f, 3.2f)
+                line(10f, 10.8f, 10f, 17f)
             }
         }
     }
@@ -669,6 +713,15 @@ fun SheetScaffold(
     val scale = motionScale()
     val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     val d = Motion.d(Motion.SHEET, scale)
+    // V1.4 #8: sheet bisa ikut memakai liquid glass kalau area "sheet" dipilih.
+    // Aman karena SheetScaffold dirender di level aplikasi sebagai SAUDARA dari
+    // Box sakuLayerBackdrop, bukan turunannya (lihat catatan crash di Glass.kt).
+    val glass = LocalGlassUi.current
+    val chrome = if (glass.sheet && glass.backdrop != null) {
+        Modifier.glassPanel(t, glass.backdrop, shape)
+    } else {
+        Modifier.background(t.sheet)
+    }
 
     Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -698,7 +751,7 @@ fun SheetScaffold(
                         .fillMaxWidth()
                         .heightIn(max = maxSheet)
                         .clip(shape)
-                        .background(t.sheet)
+                        .then(chrome)
                         .border(1.dp, t.hairSoft, shape)
                 ) {
                     Column(

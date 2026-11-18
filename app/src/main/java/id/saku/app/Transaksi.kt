@@ -1,10 +1,5 @@
 package id.saku.app
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,44 +53,39 @@ fun Transaksi(
         TableHead(t)
 
         val listState = rememberLazyListState()
-        val firstId = rows.firstOrNull()?.id
-        LaunchedEffect(firstId) { listState.scrollToItem(0) }
+        val monthKey = cursor.get(Calendar.YEAR) * 100 + cursor.get(Calendar.MONTH)
+        LaunchedEffect(monthKey) { listState.scrollToItem(0) }
 
-        AnimatedContent(
-            targetState = cursor.get(Calendar.YEAR) * 100 + cursor.get(Calendar.MONTH),
-            transitionSpec = { fadeIn(tween(240, delayMillis = 60)) togetherWith fadeOut(tween(120)) },
-            modifier = Modifier.weight(1f)
-        ) { _ ->
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                state = listState,
-                contentPadding = PaddingValues(bottom = 104.dp)
-            ) {
-                if (rows.isEmpty()) {
-                    item {
-                        Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 26.dp)) {
-                            Text("Belum ada transaksi bulan ini.", Type.body, t.ink)
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                "Catat yang pertama.",
-                                Type.label.copy(fontWeight = FontWeight.SemiBold),
-                                t.accent,
-                                Modifier.tap(onCatat)
-                            )
-                        }
+        // V1.4 #1: daftar dibuat sekali; animasi masuk per baris saat bulan berganti.
+        LazyColumn(
+            Modifier.fillMaxWidth().weight(1f),
+            state = listState,
+            contentPadding = PaddingValues(bottom = 104.dp)
+        ) {
+            if (rows.isEmpty()) {
+                item {
+                    Column(Modifier.fillMaxWidth().padding(top = 26.dp, bottom = 26.dp)) {
+                        Text("Belum ada transaksi bulan ini.", Type.body, t.ink)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Catat yang pertama.",
+                            Type.label.copy(fontWeight = FontWeight.SemiBold),
+                            t.accent,
+                            Modifier.tap(onCatat)
+                        )
                     }
                 }
-                itemsIndexed(rows, key = { _, tx -> tx.id }) { i, tx ->
-                    Box(Modifier.animateItem().rowEnter(i)) {
-                        TxRow(
-                            t = t,
-                            saku = saku,
-                            tx = tx,
-                            saldo = running.getOrElse(i) { 0L },
-                            newest = i == 0,
-                            flash = tx.id == flashId
-                        ) { onOpen(tx) }
-                    }
+            }
+            itemsIndexed(rows, key = { _, tx -> tx.id }) { i, tx ->
+                Box(Modifier.animateItem().rowEnter(i, monthKey)) {
+                    TxRow(
+                        t = t,
+                        saku = saku,
+                        tx = tx,
+                        saldo = running.getOrElse(i) { 0L },
+                        newest = i == 0,
+                        flash = tx.id == flashId
+                    ) { onOpen(tx) }
                 }
             }
         }

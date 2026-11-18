@@ -41,6 +41,8 @@ dependencies {
     implementation("androidx.compose.animation:animation")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.15.0")
+    // V1.4 #5: penyimpanan per-record, menggantikan satu string JSON di SharedPreferences
+    implementation("androidx.datastore:datastore-preferences:1.1.7")
 
     // Liquid Glass (Backdrop) dari https://github.com/Kyant0/AndroidLiquidGlass
     // Dipakai untuk dock dan FAB; bisa dimatikan lewat Setting > Theme > Dock.

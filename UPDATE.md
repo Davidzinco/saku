@@ -1,30 +1,88 @@
-V1.x (upcoming)
-integrasi scan dan ai serta sync dengan aplikasi lain. persiapan penambahan menu backup to google drvie 
+V1.x (upcoming)  
+integrasi scan dan ai serta sync dengan aplikasi lain. persiapan penambahan menu backup to google drvie
 
-V1.4 (rekomendasi, belum dikerjakan)
-1. Kompres foto saat disimpan. `Photo.kt` saat ini menyalin berkas kamera/galeri apa adanya dan `BitmapFactory.decodeFile` memuat bitmap penuh; foto 12MP bisa bikin sheet detail berat. Simpan WebP ~1280px + thumbnail terpisah.
-2. Uji fallback kaca di perangkat Android 8.0–11 (minSdk 26). `blur()` butuh API 31 dan `lens()` butuh API 33; library sudah punya jalur datar, tapi belum diverifikasi di perangkat nyata.
-3. Tambah instrumentation test untuk tiga regresi yang paling mudah kambuh: scrub chart vs geser pager, klik tab cepat berulang, dan dock tahan-belum-lepas.
-4. Siapkan backup/restore sebagai prasyarat V1.x: ekspor `db` JSON + folder `filesDir/photos/` jadi satu arsip, plus impor dengan validasi. Tanpa ini foto hilang saat pindah HP.
-5. Pindahkan `SharedPreferences` + satu string JSON ke DataStore/Room bila transaksi sudah ratusan; `Store.save()` sekarang menulis seluruh database setiap kali ada perubahan.
+V1.4 (bug fix and add new feature)
+1. untuk slide chart itu kadang transaksi tidak terload, ngelag atau tidak optimal dan hilangkan slider pada bawah chart.
+2. jam pada menu transaksi pasih belum effisien buat seperti desain in "C:\Users\Davidzinco\WorkBuddy AI\2026-11-17-12-42-19\saku-compose\design\time.webp"  
+3. Siapkan backup/restore sebagai prasyarat V1.x: ekspor db JSON + folder filesDir/photos/ jadi satu arsip, plus impor dengan validasi. Tanpa ini foto hilang saat pindah HP.
+4. samakan bottom menu nya dengan aplikasi yang sebelumnya yaitu lebih rounded tidak kotak dan saat di hold membesar 
+5. Pindahkan SharedPreferences + satu string JSON ke DataStore/Room bila transaksi sudah ratusan; Store.save() sekarang menulis seluruh database setiap kali ada perubahan.
 6. Sheet detail: tambah navigasi transaksi sebelumnya/berikutnya dan konfirmasi hapus yang tidak menutup sheet secara mendadak.
-7. Foto: izinkan lebih dari satu lampiran per transaksi, atau setidaknya pratinjau layar penuh dengan pinch-zoom untuk struk.
-8. Item 8 pada daftar V1.3 masih kosong — isi bila ada temuan baru dari pemakaian harian.
-9. Sinkronkan `DESIGN.md` bila mode Kaca diputuskan jadi default permanen; saat ini mode Kertas tetap tersedia lewat Setting > Theme > Dock.
-10. Rapikan tooling build: `android.builtInKotlin=false`, `android.newDsl=false`, dan plugin `org.jetbrains.kotlin.android` sudah deprecated di AGP 9 / Kotlin 2.4.10. Build tetap sukses tanpa warning kode Kotlin, tapi migrasi ke DSL baru perlu diuji sebelum upgrade AGP berikutnya.
+7. Foto: izinkan lebih dari satu lampiran per transaksi, atau setidaknya pratinjau layar penuh dengan pinch-zoom untuk struk. dan juga ganti ui untuk menangkap foto atau memilih foto menjadi icon yang berada di note bukan sebagai button di bawah note.
+8. rencanakan perubahan desain total untuk merubah beberapa menu yang munggukin bisa menggunakan tema liquid glass. namun tetap memeberikan pilihan opsi pata Setting > Theme > UI di situ tersedia pilihan mana saja yang mau atau akan di ubah menjadi liquid atau paper design.
+9. hilangkan ini daro beberapa ui ini seperti
+    1. "Opsional. Lampirkan struk atau foto ke catatan."
+    2. "Saldo ahir"
+    3. "Lembar [date]"
+    4. "Tertinggi Oktober, [pengeluaran_tertinggi]"
+    5. "tahan & geser"
+10. Pada nabung yang di tampilkan di home memiliki opsi tersendiri mau di tampilkan atau tidak pada menu setting, dan bergulir dengan nabung yang lain atau tidak, dan bisa di pilih yang akan di pin di home nabung yang mana
+11. Kompres foto saat disimpan. Photo.kt saat ini menyalin berkas kamera/galeri apa adanya dan BitmapFactory.decodeFile memuat bitmap penuh; foto 12MP bisa bikin sheet detail berat. Simpan WebP ~1280px + thumbnail terpisah.
+12. Update file DESIGN.md
+
+### Status pengerjaan V1.4 (2026-11-18, selesai)
+
+1. **Selesai** — scrub grafik tidak lagi membuat daftar transaksi kosong/ngelag. `AnimatedContent` yang berganti kunci tiap bulan di Home dan Transaksi dihapus; `LazyColumn` kini dibuat sekali, animasi masuk berjalan per baris lewat `rowEnter(i, monthKey)`. Data grafik dihitung sekali per jendela lewat `trendFast()` (satu lintasan transaksi, bukan 6–12 kali filter) dan di-`remember` per tahun/paruh tahun. Slider 26dp di bawah chart **dihapus** — grafiknya sendiri yang jadi ruang gestur, dengan down tetap dikonsumsi dan pager tetap dimatikan saat scrub.
+2. **Selesai** — Time Input baru mengikuti `design/time.webp`: field 48dp dengan contextual prefix (ikon jam), clear-time (×), chevron, popover tiga kolom ber-interval (jam / menit tiap 5 menit / AM-PM), selected segment disorot aksen, toggle 24 jam/12 jam, dan preset pagi/siang/sore/malam. Stepper lama dihapus.
+3. **Selesai** — Setting > Backup: ekspor satu ZIP (`saku.json` + `photos/`) lewat `ACTION_CREATE_DOCUMENT`, impor lewat `ACTION_OPEN_DOCUMENT`, tanpa permission. Impor divalidasi (path traversal, jumlah/ukuran entry, `saku.json` wajib, `Saku.isSane()`), path foto dibuat relatif saat ekspor lalu dipetakan ke `filesDir` perangkat tujuan. Foto lama tidak dihapus saat impor.
+4. **Selesai** — dock dan wash jadi kapsul penuh (`RoundedCornerShape(50)`), bukan sudut 22dp; selama jari menahan dock membesar ke 1.045× dengan spring lalu kembali saat lepas. Sistem geser V1.3 tidak diubah.
+5. **Selesai** — `SharedPreferences` + satu string JSON diganti **DataStore Preferences** dengan satu key per transaksi. `Store.save()` sekarang hanya menulis record yang berubah (diff terhadap snapshot), bukan seluruh database. Data lama dimigrasikan otomatis sekali saat `load()` pertama. Room tidak dipilih karena butuh KSP/codegen yang berisiko pada AGP 9.2.1 + Kotlin 2.4.10; DataStore memberi manfaat yang sama tanpa itu. `README.md` mencatat keputusan ini.
+6. **Selesai** — sheet detail punya navigasi transaksi sebelumnya/berikutnya (`n / total` + chevron). Menghapus tidak lagi menutup sheet mendadak: sheet tetap terbuka, pindah ke transaksi tetangga bila ada, dan menampilkan "Transaksi dihapus" + tombol Tutup bila tidak ada.
+7. **Selesai** — satu transaksi bisa punya sampai 6 lampiran (`Tx.photos`, tetap membaca `Tx.photo` lama). Pratinjau layar penuh dengan pinch-zoom/pan dan navigasi antar foto. Aksi kamera/galeri pindah jadi dua ikon di dalam field Note; tombol dan caption di bawah Note dihapus.
+8. **Selesai (dikoreksi patch crash)** — Setting > Theme > **UI** berisi **3 area overlay** (Dock, Tombol catat, Sheet) yang masing-masing bisa dipilih **Kertas/Kaca**. Theme > Mode dasar tetap jadi sakelar utama. Implementasinya lewat `Saku.uiGlass` + `LocalGlassUi`. **"Ringkasan Home" dihapus dari pilihan** setelah ditemukan crash native saat Kaca aktif — lihat bagian "Perbaikan crash mode Kaca" di bawah. Desain total (semua permukaan *overlay* jadi kaca sekaligus) tetap tersedia sebagai pilihan, bukan paksaan.
+9. **Selesai** — teks yang diminta dihapus: "Opsional. Lampirkan struk atau foto ke catatan.", label "Saldo akhir" di Home, "Lembar [date]", caption "Tertinggi …", dan "tahan & geser". Label berbayang di halaman lain ("Saldo akhir" di Nabung/Setting) disingkat jadi "Saldo" supaya nilainya tetap bermakna.
+10. **Selesai** — Setting > **Home**: tampilkan/sembunyikan ringkasan nabung, bergulir bersama target lain atau tidak, dan pin target tertentu (atau otomatis pilih yang paling banyak). Saat "bergulir" aktif, Home memakai `LazyRow` berisi semua target.
+11. **Selesai** — foto dikompres saat disimpan: decode dengan `inSampleSize`, koreksi rotasi EXIF, WebP maksimal 1280px (quality 82) + thumbnail 320px terpisah. Thumbnail dipakai di daftar, berkas utama baru didecode (masih tersampel) di pratinjau penuh. `file_paths.xml` ditambah `cache-path` untuk berkas mentah kamera.
+12. **Selesai** — `DESIGN.md` dan `README.md` disinkronkan (anggaran tinggi grafik turun ke ~124dp, Time Input, dock kapsul, opsi UI per area, foto, backup, penyimpanan, changelog).
+
+### Perbaikan crash mode Kaca (2026-11-18, patch V1.4)
+
+**Laporan:** «setiap saya buka dan di pilih ke liquid selalu crash dan tidak bisa di buka».
+
+**Hasil `adb`** (perangkat `RRCYA016B5A` / `SM-A566B`, Android 17 / SDK 37):
+
+- `logcat -b crash`: `Fatal signal 11 (SIGSEGV), code 2 (SEGV_ACCERR)` pada **RenderThread** (`tid 6971`, `pid 6831`, `id.saku.app`).
+- `Cause: stack pointer is not in a rw map; likely due to stack overflow.`
+- Backtrace lebih dari 500 frame berulang: `libhwui.so` → `RenderNode::prepareTreeImpl` ↔ `SkiaDisplayList::prepareListAndChildren`. **Bukan** exception Java/Kotlin, jadi tidak ada stack trace aplikasi.
+- DataStore yang tersimpan berisi `{"home":true,"sheet":true}` — area **Ringkasan Home** ikut dinyalakan, dan Home adalah halaman default, makanya app langsung crash saat dibuka.
+
+**Akar masalah (dikonfirmasi dari sumber Backdrop 2.0.1):** `LayerBackdropNode.draw()` merekam subtree `layerBackdrop` ke satu `GraphicsLayer`; `LayerBackdrop.drawBackdrop()` lalu memanggil `drawLayer()` pada `GraphicsLayer` yang sama. V1.4 memasang `glassPanel()` di `Beranda.SaldoBlock`, yaitu **di dalam** subtree yang sedang direkam — display list akhirnya memuat dirinya sendiri dan HWUI menyiapkan `RenderNode` yang sama tanpa henti sampai stack RenderThread habis. Aplikasi liquid glass sebelumnya tidak crash karena `LiquidBottomTabs` dirender sebagai **saudara** dari Box `layerBackdrop`, bukan turunannya.
+
+**Yang diperbaiki:**
+
+1. `Beranda.SaldoBlock` tidak lagi memakai `glassPanel()` — ringkasan kembali ke permukaan datar (secara visual setara, karena di belakangnya hanya ada latar `t.bg` polos).
+2. `App.kt` menambah `CompositionLocalProvider(LocalGlassUi provides GlassUi())` **di dalam** subtree `sakuLayerBackdrop`: `backdrop` sengaja `null` di sana, sehingga tidak ada komponen halaman yang bisa memasang kaca lagi. Ini pengaman struktural untuk perubahan berikutnya.
+3. `GlassUi.home` dihapus; `glassAreas` tinggal 3 area overlay (Dock / Tombol catat / Sheet). `Saku.glassPref()` punya hard guard: area di luar daftar selalu `false`.
+4. Preferensi lama dibersihkan: `safeUiGlass()` membuang kunci asing/terlarang di `decodeSaku`, `decodePrefs`, `encodeUiGlass`, dan `Store.load()` menulis ulang `K_UI` bila ada kunci yang dibuang. Jadi perangkat yang sudah telanjur menyimpan `"home":true` tidak bisa menyalakan lagi jalur yang crash. (DataStore lama juga berisi `"sheet":true` — sheet kaca tetap aktif dan diuji, karena sheet memang saudara dari layer yang direkam.)
+5. `Setting > Theme > UI` dan `Ui.kt` diberi catatan kenapa halaman/ringkasan selalu kertas.
+
+**Verifikasi (`adb`, perangkat `RRCYA016B5A` / SM-A566B, Android 17 / SDK 37):**
+
+- `:app:compileDebugKotlin` dan `:app:assembleDebug` sukses, `apksigner verify` → `Verifies` (v2).
+- `adb install -r saku-1.4-debug.apk` → `Success`; `logcat -b all -c` lalu cold start. **Buffer `crash` kosong**, tidak ada `SIGSEGV` / `RenderNode::prepareTreeImpl` / `FATAL EXCEPTION`.
+- Preferensi lama di perangkat benar-benar dibersihkan: `{"home":true,"sheet":true}` → **`{"sheet":true}`** (kunci `home` hilang dari `saku_v2.preferences_pb`).
+- Setting › Theme › UI kini menampilkan **3 area** (Dock, Tombol catat, Sheet), semuanya dalam posisi **Kaca** — jadi mode liquid aktif penuh, bukan dinonaktifkan diam-diam.
+- Sheet "Catat transaksi" dibuka lewat FAB: kaca bekerja (konten Home terlihat buram di belakang sheet), tidak crash. Sheet detail transaksi juga dibuka, tidak crash.
+- APK final: `saku-1.4-debug.apk` (12.869.286 byte), SHA256 `c81fde54a0a019efc3552978c5f19d679984db27decc4e64941039ba3c4479c6`; salinan di root workspace `Saku-V1.4-LiquidGlass.apk`.
+
+### Catatan
+
+- Build `assembleDebug` sukses tanpa warning kode Kotlin (hanya warning deprecated plugin Gradle yang sudah ada sejak V1.2). APK V1.4 (termasuk patch crash) disimpan sebagai `saku-1.4-debug.apk` di root repo.
+- V1.x tetap rencana: scan + AI, sinkronisasi aplikasi lain, backup ke Google Drive. Fondasi backup/restore lokal untuk itu sudah ada.
 
 V1.3 (bug fix)
-1. untuk slider pada chart itu bisa di hold dan langsung memunculkan data pada bulan itu juga, dan fix untuk saat di slide ke kanan malah ke menu transaksi jadi berikan space untuk menggeser chart pada bulan 
-2. pada bar di bawah bug sudah di benahi tapi untuk sistemnya jangan di rubah yaitu saat hold belum di lepas jangan membuka halaman nya 
-3.  kadang ketika terlalu cepat menekan menu seperti home ke transaksi secara berulang mengalami freze atau berhenti di tengah tengah
+
+1. untuk slider pada chart itu bisa di hold dan langsung memunculkan data pada bulan itu juga, dan fix untuk saat di slide ke kanan malah ke menu transaksi jadi berikan space untuk menggeser chart pada bulan
+2. pada bar di bawah bug sudah di benahi tapi untuk sistemnya jangan di rubah yaitu saat hold belum di lepas jangan membuka halaman nya
+3. kadang ketika terlalu cepat menekan menu seperti home ke transaksi secara berulang mengalami freze atau berhenti di tengah tengah
 4. transaksi yang muncul pada menu home masih belum memliki animasi
 5. untuk menu transaksi pada bagian jam nya ganti desain nya karena sangat tidak efisien.
 6. pada saat transaksi di klik bukan langsung memunculkan menu edit melainkan menampilkan menu detail
 7. tambah kan menu foto pada note di catatan transaksi
-8. 
-
+8.
 
 ### Status pengerjaan V1.3 (2026-11-17, selesai)
+
 1. **Selesai** — grafik kini bisa ditekan-tahan: bulan di bawah jari langsung dipilih sejak `ACTION_DOWN`, data bulan itu langsung tampil tanpa harus menggeser dulu. Ditambah strip geser khusus 26dp di bawah sumbu bulan. Geser horizontal tidak lagi pindah ke menu Transaksi: down dikonsumsi oleh handler grafik dan `HorizontalPager.userScrollEnabled` dimatikan selama scrub. Handler tidak lagi restart saat cursor berubah (dulu `pointerInput(cursor)` memutus drag).
 2. **Selesai** — sistem dock tidak diubah: wash tetap mengikuti jari dengan spring yang sama, tetapi `onTab` baru dipanggil setelah jari dilepas.
 3. **Selesai** — semua perpindahan tab lewat `selectTab()` dengan satu `Job` yang dibatalkan sebelum animasi baru, jadi `animateScrollToPage` tidak lagi bertumpuk.
@@ -35,11 +93,13 @@ V1.3 (bug fix)
 8. *(kosong di daftar asli — belum ada perubahan)*
 
 ### Tambahan di luar daftar V1.3
+
 - Liquid glass dari `Kyant0/AndroidLiquidGlass` (`io.github.kyant0:backdrop:2.0.1` + `shapes:1.2.1`) dipasang pada dock, wash tab aktif, dan FAB: `vibrancy() + blur() + lens()` dengan highlight, shadow, dan inner shadow. Seluruh layar direkam lewat satu `LayerBackdrop` dengan latar opaque.
 - Setting > Theme > Dock mendapat pilihan **Kertas / Kaca** (`Saku.glass`, tersimpan di JSON) supaya arah *Buku Tabungan* di `DESIGN.md` tetap bisa dipakai penuh.
 - `DESIGN.md` dan `README.md` disinkronkan dengan mode opsional ini.
 
 V1.2 (bug fix and add new feature)
+
 1. Bug nomer 8. (ada bug slide bar di bawah yaitu saat berada di menu atur tidak bisa di geser ke home ) masih ada lebih tepat nya adalah saat di geser kembali ke beranda tidak mau
 2. mengubah, menambah transaksi tidak memiliki animasi
 3. terlalu mudah keluar aplikasi seperti saat di menu mencatat aplikasi dan menekan back dia langsung keluar aplikasi
@@ -50,22 +110,22 @@ V1.2 (bug fix and add new feature)
 8. mungkin default color nya adalah monokrom dengan mode gelap.
 9. bisa di slide tanpa harus memencet menu yang berada di bawah.
 10. untuk grafik garis tidak bisa di tekan.
-11. untuk grafik pengeluaran bar dan garis bisa di slide 
+11. untuk grafik pengeluaran bar dan garis bisa di slide
 12. warna transaksi keluar atau mines adalah merah.
 
-
 V1.1 (Add some feature)
-1. saat input nominal setiap 3 angka di belakang berikan , 
+
+1. saat input nominal setiap 3 angka di belakang berikan ,
 2. pada saat memasukan tanggal berikan berikan juga jam nya
 3. tidak adanya edit/hapus transaksi
 4. pada bulan yang di tampilkan di home bulan yang di tampilkan selalu 6 atau 12 bulan sekaligus (berikan pilihanya di setingan) aadan bar yang ter select bukan hanya di pojok kanan melainkan mengikuti di mana arah yang di tuju dan bulannya tidak bergeser (serperti sekarang)
 5. pada menu tabung terlalu minimalis dan terlalu minim fitur seperti:
-    1. saat sudah meng-input uang tidak bisa di edit
-    2. hanya bisa memberikan input 100rb
-    3. saldonya harus sync dnegnan saldo ahir
-    4. improve lah ui nya
+   1. saat sudah meng-input uang tidak bisa di edit
+   2. hanya bisa memberikan input 100rb
+   3. saldonya harus sync dnegnan saldo ahir
+   4. improve lah ui nya
 6. di atur tema mungkin lebih baik di kasih beberapa opsi yaitu 2 defauld terang dan gelap dan ada lagi template color pallet yang populer dan custom sendiri
 7. di atur jangan langsung tunjukan semua nya melainkan nanti harus masuk ke folder baru seperti tema di dalamnya berisi tema, pengaturan kategori di dalam nya berisi pengaturan kategori
-8. ada bug slide bar di bawah yaitu saat berada di menu atur tidak bisa di geser ke home 
-9. berikan pilihan pada data bar di home menjadi ada grafik naik turun 
+8. ada bug slide bar di bawah yaitu saat berada di menu atur tidak bisa di geser ke home
+9. berikan pilihan pada data bar di home menjadi ada grafik naik turun
 10. tambahkan animasi lebih agar terlihat lebih enak dan fluit
