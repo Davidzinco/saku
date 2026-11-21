@@ -115,7 +115,9 @@ sudah menggulir, dan aturan kaca overlay dari patch crash V1.4 tidak dilanggar.
   disarankan smoke test: buka Setting › Theme (semua area Kaca), buat target
   nabung + gambar, buka detail/riwayat, simpan transaksi dengan Time Input baru,
   lalu ekspor/impor backup. Aturan kaca overlay tidak disentuh oleh perubahan ini.
-- Perubahan **belum di-commit / di-push**; repo masih di `a0113ee` (V1.4).
+- Perubahan sudah **di-commit** sebagai `ced6e85` dan **di-push** ke
+  `origin/master` (`github.com/Davidzinco/saku`) pada 2026-11-21; remote kini di
+  `ced6e85` (sebelumnya `a0113ee` / V1.4). Tag/rilis GitHub **belum dibuat**.
 
 V1.4 (bug fix and add new feature)
 1. untuk slide chart itu kadang transaksi tidak terload, ngelag atau tidak optimal dan hilangkan slider pada bawah chart.
