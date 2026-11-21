@@ -23,6 +23,8 @@ object Backup {
     const val DB = "saku.json"
     const val MANIFEST = "manifest.json"
     const val PHOTO_DIR = "photos/"
+    /** V1.5 #5 — gambar motivasi target nabung ikut satu arsip dengan foto. */
+    const val GOAL_DIR = "goals/"
 
     private const val MAX_ENTRIES = 400
     private const val MAX_TOTAL = 100L * 1024 * 1024
@@ -56,6 +58,15 @@ object Backup {
             t.put("photos", names)
             t.remove("photo")
         }
+        // V1.5 #5: path absolut gambar target dibuat relatif terhadap filesDir
+        // supaya arsip tetap bisa dipulihkan di perangkat lain.
+        o.optJSONArray("goals")?.let { goals ->
+            for (i in 0 until goals.length()) {
+                val g = goals.getJSONObject(i)
+                val img = g.optString("image", "")
+                if (img.isNotEmpty()) g.put("image", GOAL_DIR + File(img).name)
+            }
+        }
         o.put("photosRelative", true)
         return o.toString()
     }
@@ -81,6 +92,16 @@ object Backup {
                 ?.sortedBy { it.name }
                 ?.forEach { f ->
                     zip.putNextEntry(ZipEntry(PHOTO_DIR + f.name))
+                    f.inputStream().buffered().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                    photos++
+                }
+            // V1.5 #5: gambar target nabung
+            goalsDir(ctx).listFiles()
+                ?.filter { it.isFile }
+                ?.sortedBy { it.name }
+                ?.forEach { f ->
+                    zip.putNextEntry(ZipEntry(GOAL_DIR + f.name))
                     f.inputStream().buffered().use { it.copyTo(zip) }
                     zip.closeEntry()
                     photos++
@@ -137,6 +158,12 @@ object Backup {
                             photoCount++
                         }
                     }
+                    name.startsWith(GOAL_DIR) && name.length > GOAL_DIR.length -> {
+                        val fName = name.removePrefix(GOAL_DIR)
+                        if (!fName.matches(SAFE_NAME)) error("Nama gambar target tidak aman: $name")
+                        File(goalsDir(ctx), fName).outputStream().use { it.write(bytes) }
+                        photoCount++
+                    }
                 }
                 zis.closeEntry()
             }
@@ -154,6 +181,14 @@ object Backup {
                         if (p.startsWith(PHOTO_DIR)) File(ctx.filesDir, p).absolutePath else p
                     }
                 )
+            },
+            // V1.5 #5: path relatif gambar target dipetakan ke filesDir tujuan.
+            goals = decoded.goals.map { g ->
+                val img = g.image
+                if (img.startsWith(GOAL_DIR)) {
+                    val fName = img.removePrefix(GOAL_DIR)
+                    g.copy(image = if (fName.matches(SAFE_NAME)) File(goalsDir(ctx), fName).absolutePath else "")
+                } else g
             }
         )
         if (!s.isSane()) error("Data di arsip tidak valid")

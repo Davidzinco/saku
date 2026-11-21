@@ -46,7 +46,11 @@ data class Tx(
 /** Kategori dibedakan lewat glyph, bukan warna (DESIGN.md § Color aturan 2). */
 data class Cat(val id: String, val name: String, val glyph: String)
 
-data class Goal(val id: String, val name: String, val target: Long)
+/**
+ * V1.5 #5 — `image` adalah path absolut ke WebP di `filesDir/goals/`.
+ * Field punya default "" supaya data V1.4 (dan backup lama) tetap terbaca.
+ */
+data class Goal(val id: String, val name: String, val target: Long, val image: String = "")
 
 /**
  * Area yang bisa dipilih sendiri antara liquid glass dan kertas (V1.4 #8).
@@ -222,8 +226,29 @@ fun Saku.countFor(catId: String): Int = tx.count { it.cat == catId }
 
 /** Saldo target nabung = setoran − penarikan, diturunkan dari transaksi (selalu sinkron dengan saldo). */
 fun Saku.savedOf(goalId: String): Long = tx.filter { it.goal == goalId }.sumOf { -it.signed }
-fun Saku.savedTotal(): Long = goals.sumOf { savedOf(it.id) }
+
+/**
+ * V1.5 #5 — satu lintasan untuk semua target. Dipakai di halaman Nabung dan
+ * ringkasan Home: kalau ada N target, `savedOf()` lama menyaring seluruh daftar
+ * transaksi N kali. Di sini cukup sekali, lalu `remember(saku.tx)` di UI.
+ */
+fun Saku.savedMap(): Map<String, Long> {
+    val result = HashMap<String, Long>()
+    tx.forEach { t ->
+        if (t.goal.isNotEmpty()) result[t.goal] = (result[t.goal] ?: 0L) - t.signed
+    }
+    return result
+}
+
+fun Saku.savedTotal(): Long {
+    val ids = goals.mapTo(HashSet()) { it.id }
+    return tx.sumOf { if (it.goal.isNotEmpty() && it.goal in ids) -it.signed else 0L }
+}
 fun Saku.goalOf(id: String): Goal? = goals.firstOrNull { it.id == id }
+
+/** V1.5 #5 — riwayat setoran/penarikan satu target, terbaru dulu. */
+fun Saku.goalHistory(goalId: String): List<Tx> = tx.filter { it.goal == goalId }
+    .sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time })
 
 fun Saku.withTx(tx: Tx): Saku = copy(
     tx = (this.tx.filter { it.id != tx.id } + tx)
@@ -241,6 +266,8 @@ object Fmt {
     private val monthAbbr = SimpleDateFormat("MMM", ID)
     private val dayHuman = SimpleDateFormat("EEE d MMM", ID)
     private val dayFull = SimpleDateFormat("d MMMM yyyy", ID)
+    private val dayWithYear = SimpleDateFormat("EEE d MMM yyyy", ID)
+    private val weekdayFmt = SimpleDateFormat("EEEE", ID)
 
     /** 16.421.404 (minus selalu U+2212) */
     fun num(v: Long): String = nf.format(v).replace('-', '\u2212')
@@ -281,7 +308,21 @@ object Fmt {
     /** 16 November 2026 */
     fun longDate(dateIso: String): String = dayFull.format(parse(dateIso))
 
+    /** "Sen 16 Nov 2026 · 07:30" untuk riwayat nabung (V1.5 #5). */
+    fun dateTime(dateIso: String, time: String): String =
+        dayWithYear.format(parse(dateIso)) + " · " + time
+
+    /** "Kamis" untuk baris detail transaksi (V1.5 #4). */
+    fun weekday(dateIso: String): String = weekdayFmt.format(parse(dateIso))
+
     fun nowTime(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
+
+    /** Versi aplikasi dibaca dari PackageManager, bukan hardcode di UI. */
+    fun appVersion(ctx: Context): String = try {
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.5"
+    } catch (e: Exception) {
+        "1.5"
+    }
 
     /** "9:5" / "0905" / "09:05" → "09:05"; null kalau belum valid. */
     fun parseTime(rawInput: String): String? {
@@ -351,7 +392,14 @@ private fun decodeCats(raw: String?): List<Cat> = try {
 }
 
 private fun encodeGoals(list: List<Goal>): String = JSONArray().apply {
-    list.forEach { put(JSONObject().apply { put("id", it.id); put("name", it.name); put("target", it.target) }) }
+    list.forEach {
+        put(JSONObject().apply {
+            put("id", it.id); put("name", it.name); put("target", it.target)
+            // V1.5 #5: path gambar target ikut tersimpan (absolut di perangkat,
+            // dibuat relatif oleh Backup.portableJson saat ekspor).
+            if (it.image.isNotEmpty()) put("image", it.image)
+        })
+    }
 }.toString()
 
 private fun decodeGoals(raw: String?): List<Goal> = try {
@@ -359,7 +407,12 @@ private fun decodeGoals(raw: String?): List<Goal> = try {
         (0 until a.length()).mapNotNull { i ->
             runCatching {
                 val g = a.getJSONObject(i)
-                Goal(g.getString("id"), g.optString("name", ""), g.optLong("target"))
+                Goal(
+                    g.getString("id"),
+                    g.optString("name", ""),
+                    g.optLong("target"),
+                    g.optString("image", "")
+                )
             }.getOrNull()
         }
     }
@@ -599,6 +652,8 @@ sealed interface GoalSheet {
     data class Setor(val goal: Goal) : GoalSheet
     data class Tarik(val goal: Goal) : GoalSheet
     data class Ubah(val goal: Goal) : GoalSheet
+    /** V1.5 #5: ketuk kartu target membuka detail + riwayat menabung. */
+    data class Detail(val goal: Goal) : GoalSheet
 }
 
 /** Setoran: transaksi keluar berkategori Nabung, jadi saldo akhir ikut turun. */

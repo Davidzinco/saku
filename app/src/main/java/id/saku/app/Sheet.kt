@@ -2,8 +2,6 @@ package id.saku.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,15 +27,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
 /**
- * Sheet catat/ubah transaksi: nominal berformat, Date, Time (stepper + preset),
+ * Sheet catat/ubah transaksi: nominal berformat, Date, Time (grid chip + preset),
  * foto pada note, dan hapus dua ketuk. Urutan field mengikuti DESIGN.md.
  */
 @Composable
@@ -431,13 +429,16 @@ fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
 }
 
 /**
- * V1.4 #2 — Time Input mengikuti `design/time.webp`:
- * - satu field 48dp: contextual prefix (ikon jam), nilai `hh:mm` / `hh:mm aa`,
- *   clear-time (×) dan chevron pembuka popover;
- * - popover tiga kolom dengan configured intervals (jam, menit tiap 5 menit,
- *   AM/PM), selected segments disorot aksen;
- * - format 12/24 jam + preset pagi/siang/sore/malam.
- * Tidak ada keyboard, jadi tidak ada inset IME yang mengangkat sheet.
+ * V1.5 #2 — Time Input lebih minimalis, nyaman, dan tetap mengikuti grammar
+ * `design/time.webp` (field berikon jam + popover ber-interval + preset).
+ *
+ * Bedanya dari V1.4: tidak ada lagi tiga kolom yang harus digulir di dalam
+ * sheet yang juga menggulir. Jam (8 kolom) dan menit (6 kolom) tampil semua
+ * sebagai chip statis, jadi satu ketuk langsung memilih nilai tanpa scroll,
+ * tanpa LazyColumn bersarang, dan tanpa auto-scroll yang menarik posisi daftar.
+ * Field-nya satu target ketuk penuh, tombol clear pindah ke "Sekarang" di
+ * kepala popover, dan angka jam memakai ukuran lebih besar supaya mudah dibaca.
+ * Tidak ada keyboard, jadi inset IME tidak pernah mengangkat sheet.
  */
 @Composable
 private fun TimeInput(
@@ -452,110 +453,146 @@ private fun TimeInput(
     val h12 = if (hour % 12 == 0) 12 else hour % 12
     val isAm = hour < 12
     val shown = if (use12) {
-        pad2(h12) + ":" + pad2(minute) + " " + (if (isAm) "AM" else "PM")
+        pad2(h12) + ":" + pad2(minute)
     } else {
         pad2(hour) + ":" + pad2(minute)
     }
 
     Text("Time", Type.label, t.muted2)
     Spacer(Modifier.height(6.dp))
-    FieldShell(t) {
-        Glyph(Ic.Clock, t.muted2, 16.dp)
-        Spacer(Modifier.width(9.dp))
-        Box(
-            Modifier.weight(1f).fillMaxHeight().tap { expanded = !expanded },
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Text(shown, Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
+    // Satu target ketuk selebar field — lebih nyaman daripada tiga target kecil.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(
+                1.dp,
+                if (expanded) t.accent.copy(alpha = 0.45f) else t.hair,
+                RoundedCornerShape(12.dp)
+            )
+            .background(t.bg)
+            .pressable(scale = 0.99f, alpha = 0.96f) { expanded = !expanded }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Glyph(Ic.Clock, if (expanded) t.accent else t.muted2, 18.dp)
+        Spacer(Modifier.width(11.dp))
+        Text(
+            shown,
+            Type.title.copy(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+            t.ink,
+            Modifier.weight(1f)
+        )
+        if (use12) {
+            Text(
+                if (isAm) "AM" else "PM",
+                Type.micro.copy(fontWeight = FontWeight.SemiBold),
+                t.accent,
+                Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(t.accentWash)
+                    .padding(horizontal = 7.dp, vertical = 3.dp)
+            )
+            Spacer(Modifier.width(8.dp))
         }
-        TouchTarget {
-            Box(Modifier.fillMaxSize().tap(onClear), contentAlignment = Alignment.Center) {
-                Glyph(Ic.Close, t.muted2, 14.dp)
-            }
-        }
-        TouchTarget {
-            Box(
-                Modifier.fillMaxSize().tap { expanded = !expanded },
-                contentAlignment = Alignment.Center
-            ) { Glyph(if (expanded) Ic.Up else Ic.Down, t.muted2, 16.dp) }
-        }
+        Glyph(if (expanded) Ic.Up else Ic.Down, t.faint, 14.dp)
     }
 
     if (!expanded) return
 
-    val hourValues = if (use12) (1..12).toList() else (0..23).toList()
+    // Daftar statis: tidak ada LazyColumn / scroll bersarang di dalam sheet.
+    val hourValues = remember(use12) { if (use12) (1..12).toList() else (0..23).toList() }
     val minuteValues = remember(minute) { (minuteIntervals + minute).distinct().sorted() }
     Spacer(Modifier.height(8.dp))
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, t.hair, RoundedCornerShape(10.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, t.hairSoft, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Format", Type.micro, t.muted2, Modifier.weight(1f))
-            listOf("24 jam", "12 jam").forEachIndexed { i, label ->
-                val on = (i == 1) == use12
-                Box(
+            listOf(false, true).forEach { is12 ->
+                val on = use12 == is12
+                Text(
+                    if (is12) "12j" else "24j",
+                    Type.micro.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                    if (on) t.accent else t.muted,
                     Modifier
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(7.dp))
                         .background(if (on) t.accentWash else Color.Transparent)
-                        .tap { use12 = i == 1 }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) { Text(label, Type.micro, if (on) t.accent else t.muted) }
+                        .tap { use12 = is12 }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Sekarang",
+                Type.micro.copy(fontWeight = FontWeight.SemiBold),
+                t.accent,
+                Modifier.tap(onClear)
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Text("Jam", Type.micro, t.muted2)
+        Spacer(Modifier.height(5.dp))
+        TimeGrid(
+            t = t,
+            rows = hourValues.chunked(8),
+            selected = if (use12) h12 else hour,
+            display = { pad2(it) }
+        ) { v ->
+            val h = if (!use12) v else {
+                val base = if (v == 12) 0 else v
+                if (isAm) base else base + 12
+            }
+            onTime(h.coerceIn(0, 23), minute)
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Text("Menit", Type.micro, t.muted2)
+        Spacer(Modifier.height(5.dp))
+        TimeGrid(
+            t = t,
+            rows = minuteValues.chunked(6),
+            selected = minute,
+            display = { pad2(it) }
+        ) { onTime(hour, it) }
+
+        if (use12) {
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(true, false).forEach { am ->
+                    val on = isAm == am
+                    TimeChip(
+                        t = t,
+                        label = if (am) "AM" else "PM",
+                        selected = on,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        val h = if (am) hour % 12 else (hour % 12) + 12
+                        onTime(h.coerceIn(0, 23), minute)
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth().height(148.dp)) {
-            TimeColumn(
-                label = "Jam",
-                values = hourValues,
-                selected = if (use12) h12 else hour,
-                t = t,
-                modifier = Modifier.weight(1f),
-                display = { pad2(it) }
-            ) { v ->
-                val h = if (!use12) v else {
-                    val base = if (v == 12) 0 else v
-                    if (isAm) base else base + 12
-                }
-                onTime(h.coerceIn(0, 23), minute)
-            }
-            TimeColumn(
-                label = "Menit",
-                values = minuteValues,
-                selected = minute,
-                t = t,
-                modifier = Modifier.weight(1f),
-                display = { pad2(it) }
-            ) { onTime(hour, it) }
-            if (use12) {
-                TimeColumn(
-                    label = "",
-                    values = listOf(0, 1),
-                    selected = if (isAm) 0 else 1,
-                    t = t,
-                    modifier = Modifier.weight(1f),
-                    display = { if (it == 0) "AM" else "PM" }
-                ) { v ->
-                    val h = if (v == 0) hour % 12 else (hour % 12) + 12
-                    onTime(h.coerceIn(0, 23), minute)
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
+
+        Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(8, 12, 17, 20).forEach { h ->
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(1.dp, t.hair, RoundedCornerShape(8.dp))
-                        .tap { onTime(h, 0); expanded = false },
-                    contentAlignment = Alignment.Center
-                ) { Text(dayPart(h), Type.micro, t.muted) }
+                val on = hour == h && minute == 0
+                TimeChip(
+                    t = t,
+                    label = dayPart(h),
+                    selected = on,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    onTime(h, 0)
+                    expanded = false
+                }
             }
         }
     }
@@ -563,43 +600,55 @@ private fun TimeInput(
 
 private val minuteIntervals: List<Int> = (0..55 step 5).toList()
 
+/** Grid chip statis. Sengaja memakai `tap`, bukan `pressable`, karena ada
+ *  hingga 36 chip: 36 InteractionSource + animasi ganda itu sia-sia. */
 @Composable
-private fun TimeColumn(
-    label: String,
-    values: List<Int>,
-    selected: Int,
+private fun TimeGrid(
     t: Tok,
-    modifier: Modifier,
+    rows: List<List<Int>>,
+    selected: Int,
     display: (Int) -> String,
     onPick: (Int) -> Unit
 ) {
-    Column(
-        modifier.fillMaxHeight().verticalScroll(rememberScrollState()),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        if (label.isNotEmpty()) {
-            Text(label, Type.micro, t.muted2, Modifier.padding(vertical = 4.dp))
-        } else {
-            Spacer(Modifier.height(4.dp))
-        }
-        values.forEach { v ->
-            val on = v == selected
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (on) t.accent else Color.Transparent)
-                    .tap { onPick(v) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    display(v),
-                    Type.bodySm.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
-                    if (on) (if (t.dark) t.bg else Color.White) else t.ink
-                )
+    val columns = rows.firstOrNull()?.size ?: 0
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { v ->
+                    TimeChip(
+                        t = t,
+                        label = display(v),
+                        selected = v == selected,
+                        modifier = Modifier.weight(1f)
+                    ) { onPick(v) }
+                }
+                repeat((columns - row.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
             }
-            Spacer(Modifier.height(2.dp))
         }
+    }
+}
+
+@Composable
+private fun TimeChip(
+    t: Tok,
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (selected) t.accent else Color.Transparent)
+            .then(if (!selected) Modifier.border(1.dp, t.hairSoft, RoundedCornerShape(8.dp)) else Modifier)
+            .tap(onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label,
+            Type.label.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+            if (selected) (if (t.dark) t.bg else Color.White) else t.ink
+        )
     }
 }

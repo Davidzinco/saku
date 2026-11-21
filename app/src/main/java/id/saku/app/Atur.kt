@@ -13,6 +13,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,6 +79,7 @@ fun Atur(saku: Saku, t: Tok, onChange: (Saku) -> Unit) {
 
 @Composable
 private fun AturRoot(saku: Saku, t: Tok, go: (AturPage) -> Unit) {
+    val ctx = LocalContext.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
         ScreenHeader(t, "Setting", back = false)
         Spacer(Modifier.height(16.dp))
@@ -132,9 +134,12 @@ private fun AturRoot(saku: Saku, t: Tok, go: (AturPage) -> Unit) {
         InfoRow(t, "Target nabung", saku.goals.size.toString())
         InfoRow(t, "Tersimpan", Fmt.rp(saku.savedTotal()))
         InfoRow(t, "Saldo", Fmt.rp(saku.balance()))
+        // V1.5 #8: versi dibaca dari PackageManager (versionName di Gradle),
+        // jadi tidak pernah lagi tertinggal di "V1.0".
+        InfoRow(t, "Versi", "V" + Fmt.appVersion(ctx))
 
         Spacer(Modifier.height(24.dp))
-        Text("Saku \u00b7 Compose", Type.label, t.ink)
+        Text("Saku \u00b7 V" + Fmt.appVersion(ctx), Type.label, t.ink)
         Text(
             "Data tersimpan di perangkat ini. Tanpa akun, tanpa server.",
             Type.micro,
@@ -209,56 +214,84 @@ private fun TemaPage(
             Spacer(Modifier.height(8.dp))
         }
 
-        Spacer(Modifier.height(18.dp))
+        // V1.5 #6 — Custom dibuat lebih mudah: pratinjau langsung, aksen
+        // 12 warna dalam grid 6 kolom, nada kertas jadi deretan chip yang
+        // bisa digeser. Memilih salah satu langsung memakai palet custom.
+        Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Custom", Type.label, t.muted2)
             Spacer(Modifier.weight(1f))
-            if (saku.paletteId == "custom") {
-                Text("dipakai", Type.micro, t.accent)
-            }
+            Text(
+                if (saku.paletteId == "custom") "dipakai" else "ketuk warna untuk memakai",
+                Type.micro,
+                if (saku.paletteId == "custom") t.accent else t.muted2
+            )
         }
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AccentSwatches.chunked(4).forEach { group ->
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    group.forEach { hex ->
-                        val on = saku.paletteId == "custom" && saku.customAccent == hex
-                        Box(
-                            Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .background(Color(hex))
-                                .border(if (on) 2.dp else 1.dp, if (on) t.ink else t.hair, CircleShape)
-                                .tap { onChange(saku.copy(paletteId = "custom", customAccent = hex)) }
-                        )
+        CustomPreview(saku, t)
+
+        Spacer(Modifier.height(16.dp))
+        Text("Aksen", Type.label, t.muted2)
+        Spacer(Modifier.height(8.dp))
+        AccentSwatches.chunked(6).forEach { group ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                group.forEach { hex ->
+                    val on = saku.paletteId == "custom" && saku.customAccent == hex
+                    Box(
+                        Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(hex))
+                            .border(if (on) 2.dp else 1.dp, if (on) t.ink else t.hair, CircleShape)
+                            .pressable(scale = 0.9f, alpha = 0.9f) {
+                                onChange(saku.copy(paletteId = "custom", customAccent = hex))
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (on) {
+                            Glyph(Ic.Check, Color.White, 17.dp, 2.dp)
+                        }
                     }
                 }
+                repeat(6 - group.size) { Spacer(Modifier.size(38.dp)) }
             }
-            Spacer(Modifier.width(6.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Tones.forEach { tone ->
-                    val on = saku.paletteId == "custom" && saku.customTone == tone.id
-                    Row(
+            Spacer(Modifier.height(8.dp))
+        }
+
+        Spacer(Modifier.height(6.dp))
+        Text("Kertas", Type.label, t.muted2)
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Tones.forEach { tone ->
+                val on = saku.paletteId == "custom" && saku.customTone == tone.id
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, if (on) t.accent else t.hair, RoundedCornerShape(10.dp))
+                        .background(if (on) t.accentWash else Color.Transparent)
+                        .pressable(scale = 0.96f, alpha = 0.92f) {
+                            onChange(saku.copy(paletteId = "custom", customTone = tone.id))
+                        }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
                         Modifier
-                            .fillMaxWidth()
-                            .height(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, if (on) t.ink else t.hair, RoundedCornerShape(10.dp))
-                            .tap { onChange(saku.copy(paletteId = "custom", customTone = tone.id)) },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Box(
-                            Modifier.size(16.dp).clip(RoundedCornerShape(5.dp))
-                                .background(Color(tone.lBg))
-                                .border(1.dp, t.hair, RoundedCornerShape(5.dp))
-                        )
-                        Text(
-                            tone.name,
-                            Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
-                            if (on) t.ink else t.muted
-                        )
-                    }
+                            .size(14.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(tone.lBg))
+                            .border(1.dp, t.hair, RoundedCornerShape(4.dp))
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        tone.name,
+                        Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                        if (on) t.ink else t.muted
+                    )
                 }
             }
         }
@@ -271,6 +304,35 @@ private fun TemaPage(
             maxLines = 3
         )
         Spacer(Modifier.height(110.dp))
+    }
+}
+
+/** Pratinjau kombinasi custom yang sedang dipilih, sebelum dipakai penuh. */
+@Composable
+private fun CustomPreview(saku: Saku, t: Tok) {
+    val preview = remember(saku.customAccent, saku.customTone, saku.dark) {
+        buildTokens(Palette("custom", "Custom", toneOf(saku.customTone), saku.customAccent), saku.dark)
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(preview.bg)
+            .border(1.dp, t.hair, RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Contoh tampilan", Type.micro, preview.muted2)
+            Text("Rp 1.250.000", Type.title, preview.ink, Modifier.padding(top = 3.dp))
+        }
+        Box(
+            Modifier.size(34.dp).clip(CircleShape).background(preview.accent),
+            contentAlignment = Alignment.Center
+        ) {
+            Glyph(Ic.Plus, if (preview.dark) preview.bg else Color.White, 18.dp)
+        }
     }
 }
 

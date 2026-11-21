@@ -36,6 +36,10 @@ fun Transaksi(
     val income = saku.income(cursor)
     val outcome = saku.outcome(cursor)
     val diff = income - outcome
+    // V1.5 #4: ringkasan tambahan, dihitung sekali per bulan (bukan per baris).
+    val outCount = rows.count { it.type == "out" }
+    val avgOut = if (outCount > 0) outcome / outCount else 0L
+    val activeDays = rows.mapTo(HashSet()) { it.date }.size
 
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
         ScreenHeader(t, "Transaksi", back = false)
@@ -47,6 +51,14 @@ fun Transaksi(
             Stat(t, "Masuk", Fmt.sign(animatedLong(income, 360)), if (income > 0) t.pos else t.ink)
             Stat(t, "Keluar", Fmt.out(animatedLong(outcome, 360)), if (outcome > 0) t.error else t.ink)
             Stat(t, "Selisih", Fmt.sign(animatedLong(diff, 360)), if (diff > 0) t.pos else if (diff < 0) t.error else t.ink)
+        }
+
+        // V1.5 #4: dua angka turunan supaya halaman Transaksi lebih informatif.
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(26.dp)) {
+            Stat(t, "Rata-rata keluar", Fmt.rp(avgOut), t.ink)
+            Stat(t, "Hari tercatat", activeDays.toString() + " hari", t.ink)
+            Stat(t, "Catatan", rows.size.toString() + " transaksi", t.ink)
         }
 
         Spacer(Modifier.height(16.dp))

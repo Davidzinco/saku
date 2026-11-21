@@ -50,7 +50,11 @@ val Tones = listOf(
     PaperTone("hijau", "Hijau", 0xFFECEFE7, 0xFFF7F8F3, 0xFF1B2721, 0xFF121A16, 0xFF1A241F, 0xFFE7EDE5),
     PaperTone("krem", "Krem", 0xFFF1EBE1, 0xFFFAF6EF, 0xFF2B2119, 0xFF191513, 0xFF231D19, 0xFFF0E8DD),
     PaperTone("netral", "Netral", 0xFFEEEEEC, 0xFFF9F9F7, 0xFF1C1C1B, 0xFF131313, 0xFF1D1D1C, 0xFFEAEAE7),
-    PaperTone("biru", "Biru", 0xFFE6ECF2, 0xFFF5F8FB, 0xFF182430, 0xFF111820, 0xFF1A232C, 0xFFE3EAF1)
+    PaperTone("biru", "Biru", 0xFFE6ECF2, 0xFFF5F8FB, 0xFF182430, 0xFF111820, 0xFF1A232C, 0xFFE3EAF1),
+    // V1.5 #6 — dua nada kertas tambahan. Pasangan tinta/kertas tetap kontras
+    // tinggi seperti nada bawaan (lightness tinta jauh di bawah/atas kertas).
+    PaperTone("mawar", "Mawar", 0xFFF2E8EC, 0xFFFAF2F5, 0xFF2B1D22, 0xFF1A1316, 0xFF24191D, 0xFFEFE3E8),
+    PaperTone("laut", "Laut", 0xFFE2EAEF, 0xFFF0F6FA, 0xFF1A2630, 0xFF101820, 0xFF19232C, 0xFFDDE6ED)
 )
 
 data class Palette(val id: String, val name: String, val tone: PaperTone, val accent: Long)
@@ -61,13 +65,17 @@ val Palettes = listOf(
     Palette("baja", "Baja", Tones[3], 0xFF2C5D8A),
     Palette("hutan", "Hutan", Tones[0], 0xFF2F6B4F),
     Palette("ungu", "Ungu", Tones[2], 0xFF5B4BA8),
-    Palette("mono", "Monokrom", Tones[2], 0xFF3A3A38)
+    Palette("mono", "Monokrom", Tones[2], 0xFF3A3A38),
+    // V1.5 #6 — palet tambahan, masih satu nada kertas + satu aksen.
+    Palette("mawar", "Mawar", Tones[4], 0xFFA33F63),
+    Palette("laut", "Laut", Tones[5], 0xFF1A6B8A),
+    Palette("zaitun", "Zaitun", Tones[0], 0xFF5F6329)
 )
 
-/** Aksen untuk palet custom. */
+/** Aksen untuk palet custom — V1.5 #6: 12 warna, ditata 6 kolom di Setting. */
 val AccentSwatches = listOf(
-    0xFF23418F, 0xFF2C5D8A, 0xFF0F6E6E, 0xFF2F6B4F,
-    0xFF5B4BA8, 0xFFA8542F, 0xFFB03060, 0xFF3A3A38
+    0xFF23418F, 0xFF2C5D8A, 0xFF0F6E6E, 0xFF2F6B4F, 0xFF5F6329, 0xFF3A3A38,
+    0xFF5B4BA8, 0xFFA8542F, 0xFFB03060, 0xFF1A6B8A, 0xFF8A5A2B, 0xFF7A3F6E
 )
 
 fun toneOf(id: String): PaperTone = Tones.firstOrNull { it.id == id } ?: Tones[0]

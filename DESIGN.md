@@ -84,7 +84,7 @@ Mock acuan (HTML, bukan kode produksi): `design/konsep-buku-tabungan-v4.html` �
 3. Cap cobalt hanya untuk tiga hal: aksi utama (FAB, tombol simpan), tab aktif, dan saldo baris teratas. Kalau muncul di tempat keempat, hapus.
 4. Tidak ada gradien. Tidak ada glow.
 
-**Palet:** satu nada kertas + satu aksen, dihitung menjadi token lengkap (bg, lembar, tinta, muted, garis rambut, ramp kategori). Palet bawaan: Kertas, Krem & Terakota, Baja, Hutan, Ungu, Monokrom — plus custom (8 aksen × 4 nada kertas). **Default aplikasi: Monokrom + mode gelap.**
+**Palet:** satu nada kertas + satu aksen, dihitung menjadi token lengkap (bg, lembar, tinta, muted, garis rambut, ramp kategori). Palet bawaan: Kertas, Krem & Terakota, Baja, Hutan, Ungu, Monokrom, **Mawar, Laut, Zaitun** (V1.5 #6) — plus custom (**12 aksen × 6 nada kertas**). **Default aplikasi: Monokrom + mode gelap.** Semua nada tambahan memakai pasangan tinta/kertas dengan kontras setara nada bawaan; tidak ada hue neon.
 
 **Dark mode (dirancang, bukan inversi):**
 
@@ -136,29 +136,32 @@ dock              66dp, kapsul penuh, bottom 24dp
 - Empat halaman (Home, Transaksi, Nabung, Setting) hidup di satu pager horizontal. Geser ke kiri/kanan untuk pindah halaman tanpa menyentuh dock; dock selalu menyorot halaman yang sedang tampil.
 - Perpindahan halaman 320ms, transform + opacity saja (`slideInHorizontally` 1/5 lebar + fade).
 
-**Time Input (sheet) — V1.4 #2, acuan `design/time.webp`**
-- Satu field 48dp: *contextual prefix* berupa ikon jam, nilai `HH:mm` atau `hh:mm aa`, clear-time (×) yang mengembalikan jam ke waktu saat ini, dan chevron pembuka popover. Collapsed by default.
-- Popover: tiga kolom dengan *configured intervals* — Jam (0–23 atau 1–12), Menit (tiap 5 menit, nilai aktual selalu disisipkan), dan AM/PM saat format 12 jam. *Selected segments* disorot `accent`. Toggle format 24 jam/12 jam di kepala popover; 4 preset pagi/siang/sore/malam di kakinya.
-- Tidak ada keyboard, jadi tidak ada inset IME yang mengangkat sheet; `imePadding` tetap hanya di kontainer sheet. Angka tabular dan rata tengah pada kolom. Stepper V1.3 dihapus.
+**Time Input (sheet) — V1.4 #2, disempurnakan V1.5 #2, acuan `design/time.webp`**
+- Satu field 52dp yang **seluruhnya** bisa diketuk: ikon jam, nilai `HH:mm` 20sp, badge AM/PM bila format 12 jam, dan chevron. Collapsed by default. Clear-time pindah menjadi aksi "Sekarang" di kepala popover supaya field tetap minimalis.
+- Popover memakai *configured intervals* yang sama, tetapi tampil sebagai **grid chip statis**: Jam 8 kolom (0–23 atau 1–12), Menit 6 kolom (tiap 5 menit, nilai aktual selalu disisipkan), AM/PM, dan 4 preset pagi/siang/sore/malam. *Selected segment* disorot `accent`; toggle 24j/12j di kepala.
+- Alasan perubahan: tiga kolom yang digulir berada di dalam sheet yang juga menggulir. Grid statis menghilangkan scroll bersarang dan auto-scroll yang menarik posisi daftar, dan membuat semua nilai tercapai dalam satu ketuk. Chip memakai `tap` biasa (bukan `pressable`) supaya ~36 chip tidak membuat puluhan state animasi.
+- Tidak ada keyboard, jadi tidak ada inset IME yang mengangkat sheet; `imePadding` tetap hanya di kontainer sheet. Angka tabular dan rata tengah pada chip. Stepper V1.3 dihapus.
 
 **Sheet**
 - Nominal: pemisah ribuan muncul saat mengetik (`1.250.000`), angka saja.
 - Urutan field: jenis → Nominal → Category → **Note (+ ikon kamera/galeri)** → Date → Time. **V1.4 #7:** lampiran foto jadi dua ikon 17dp di ujung field Note, bukan tombol atau section tersendiri; thumbnail muncul di bawahnya hanya bila ada. Maksimal 6 lampiran, tanpa permission penyimpanan (FileProvider + Photo Picker), disimpan WebP 1280px + thumbnail 320px. Tidak ada caption "Opsional. …".
 - Footer sticky: aksi utama (dan "Hapus transaksi" saat mengubah) selalu di bawah sheet, tidak ikut tergulir.
 - Tutup: scrim, tombol ×, atau back. Hapus butuh dua ketuk konfirmasi.
-- **Sheet detail transaksi:** klik baris tidak lagi langsung membuka editor. Detail menampilkan jenis, nominal, deretan foto, lalu baris Kategori / Catatan / Tanggal panjang / Waktu / Saldo setelah / Target nabung. **V1.4 #6:** ada navigasi `n / total` + chevron ke transaksi sebelumnya/berikutnya; menghapus tidak menutup sheet mendadak (pindah ke tetangga atau tampil konfirmasi + "Tutup"). **V1.4 #7:** ketuk foto membuka pratinjau layar penuh dengan pinch-zoom. Grammar hairline dan tipografi sama dengan sheet lain.
+- **Sheet detail transaksi:** klik baris tidak lagi langsung membuka editor. Detail menampilkan jenis, nominal, deretan foto, lalu baris Kategori / Catatan / Tanggal panjang / **Hari** / Waktu / **Lampiran** / Saldo setelah / **Jenis + Target nabung** (V1.5 #4). **V1.4 #6:** ada navigasi `n / total` + chevron ke transaksi sebelumnya/berikutnya; menghapus tidak menutup sheet mendadak (pindah ke tetangga atau tampil konfirmasi + "Tutup"). **V1.4 #7:** ketuk foto membuka pratinjau layar penuh dengan pinch-zoom. Grammar hairline dan tipografi sama dengan sheet lain.
+- **Sheet detail target nabung (V1.5 #5):** kepala target di halaman Nabung bisa diketuk. Isinya gambar motivasi lebar, tersimpan (angka beranimasi), persentase + sisa, `Track`, tombol Setor/Tarik, dan **Riwayat menabung** dengan tanggal + jam tiap setoran/penarikan. Riwayat memakai `Column` biasa (8 terbaru + "Lihat semua"), bukan `LazyColumn`, karena `SheetScaffold` sudah menggulir vertikal.
 
 **Dock navigasi**
 - 5 slot: Beranda, Transaksi, [+], Nabung, Atur. Tinggi 66dp, **radius kapsul penuh (50%)** sejak V1.4 #4, surface + hairline.
-- Tab aktif: warna `accent` + wash lembut berbentuk kapsul penuh.
-- Ikon 20dp, stroke 1.5, label 10sp.
+- Tab aktif: warna `accent` + wash lembut berbentuk kapsul penuh. **V1.5 #1:** seluruh tab aktif (ikon + label) membesar 1.14× dengan spring, wash 1.035× — bukan cuma indikatornya. Skala dibaca di lambda `graphicsLayer`, jadi animasi berjalan di fase gambar tanpa recomposition Dock.
+- Ikon 20dp (21dp saat aktif), stroke 1.5, label 10sp.
 - State: default, aktif, ditekan (wash 12%), **ditahan (dock membesar 1.045× dengan spring, V1.4 #4)**, digeser (pill mengikuti jari, snap ke slot terdekat). Aksi utama (FAB) selalu terlihat, tidak pernah tersembunyi di menu.
 - **V1.3 #2/#3:** saat digeser, wash mengikuti jari tetapi halaman **baru dibuka setelah jari dilepas** (sistem geser tidak diubah). Semua perpindahan tab lewat satu jalur dengan animasi lama dibatalkan, jadi klik cepat berulang tidak membuat pager berhenti di tengah.
 - **Mode Kaca per area (V1.4 #8, dikoreksi patch crash):** `drawBackdrop` dari Backdrop 2.0.1 — `vibrancy() + blur(4–6dp) + lens(9–12dp)` dengan highlight tepi, shadow, dan inner shadow — bisa dipasang pada **Dock, Tombol catat, dan Sheet** (`glassPanel`), dipilih sendiri di Setting › Theme › UI. Seluruh halaman direkam oleh satu `LayerBackdrop` dengan latar opaque (`drawRect(bg)` sebelum `drawContent()`) supaya tidak ada piksel kaca transparan. **Ketiga permukaan kaca dirender sebagai saudara dari Box yang direkam**, bukan di dalamnya — kalau `drawBackdrop` ikut terekam, display list memuat dirinya sendiri dan HWUI mengulang `RenderNode::prepareTreeImpl` sampai stack RenderThread habis (`SIGSEGV`, tanpa exception Kotlin). Karena itu Ringkasan Home dan seluruh isi pager selalu kertas; pengaman struktural ada di `App.kt` (`LocalGlassUi` null di dalam subtree) dan `Data.kt` (`safeUiGlass()` + hard guard `glassPref()`). Warna tetap `Tok.sheet` / `Tok.accentWash` / `Tok.accent`; bentuk kapsul dock dan bulat penuh FAB tidak berubah. Di Android <12 efek otomatis menjadi permukaan datar. Tidak ada perubahan pada tata letak, ikon, atau label.
 
 **Baris transaksi**
 - Default / ditekan (`hair-soft` overlay) / baris teratas (saldo berwarna `accent`, tebal 600).
-- Nominal tanpa `Rp`, tabular, rata kanan. Meta 10.5sp: kategori, pemisah titik 2.5dp, jam.
+- Nominal tanpa `Rp`, tabular, rata kanan. Meta 10.5sp: glyph kategori, kategori, pemisah titik 2.5dp, jam, lalu penanda foto / target nabung bila ada (V1.5 #4).
+- **Grid 4 kolom (Tgl / Keterangan / Jumlah / Saldo) wajib dipertahankan.** V1.5 menambah informasi lewat meta dan halaman detail, bukan dengan menghapus kolom saldo berjalan. Kolom Tgl kini dua baris: `DD/MM` + singkatan hari.
 
 **Tombol**
 - Primary: isi `accent`, teks putih, radius bulat penuh, tinggi 48dp. Label = aksi ("Simpan transaksi").
@@ -188,6 +191,7 @@ dock              66dp, kapsul penuh, bottom 24dp
 - V1.2: baris transaksi baru/berubah diberi kilatan `accent` 16% selama 900ms; daftar memudar masuk 240ms saat bulan berganti; angka saldo/masuk/keluar/selisih bergerak 360–420ms; batang grafik tumbuh bertahap 18ms per batang; sheet punya animasi keluar 240ms sebelum dilepas.
 - V1.3 #4: baris transaksi masuk dengan fade + translasi 16px, stagger 26ms per baris (maksimal 8 baris pertama), durasi `Motion.ENTER`. Tetap transform + opacity, dan langsung snap bila animasi sistem dimatikan.
 - V1.4 #1: animasi baris diulang lewat kunci bulan, bukan dengan membongkar `LazyColumn` (fade seluruh daftar 240ms saat ganti bulan dihapus). V1.4 #4: dock ditekan membesar 1.045× dengan spring `0.7 / 420`, kembali 1.0 saat lepas — tetap transform murni.
+- V1.5 #1/#7: tab aktif membesar 1.14× (`spring 0.72 / 420`); umpan balik tekan memakai `pressable(scale, alpha)` pada tombol, baris menu, segmen, dan field Time — tidak pada item `LazyColumn` agar daftar panjang tetap murah. `Track` memakai spring `0.9 / 320` dengan **nilai animasi dijepit 0..1**: spring tanpa clamp bisa overshoot dan `fillMaxWidth(fraction)` melempar exception. Semua state animasi tekan dibaca di dalam lambda `graphicsLayer`.
 - `prefers-reduced-motion` → durasi 0ms, transisi jadi cross-fade instan.
 
 ## Iconography
@@ -201,7 +205,8 @@ dock              66dp, kapsul penuh, bottom 24dp
 
 - Tidak ada ilustrasi, maskot, atau tekstur dekoratif. Identitas visual dibawa oleh tipografi, garis, dan angka.
 - Satu-satunya "gambar" adalah data: grafik batang, batang komposisi kategori, progress nabung. Semuanya harus membawa angka nyata di dekatnya, bukan dekorasi.
-- **Pengecualian V1.4:** foto bukti transaksi yang dilampirkan pengguna. Foto bukan elemen layout — tidak ada placeholder ilustrasi saat kosong, tidak ada caption promosi, dan di Home tidak pernah ditampilkan. Disimpan terkompresi (WebP 1280px + thumbnail) agar tidak membebani sheet.
+- **Pengecualian V1.4:** foto bukti transaksi yang dilampirkan pengguna. Foto bukan elemen layout — tidak ada placeholder ilustrasi saat kosong, tidak ada caption promosi. Disimpan terkompresi (WebP 1280px + thumbnail) agar tidak membebani sheet.
+- **Pengecualian V1.5:** gambar motivasi target nabung, muncul sebagai thumbnail kecil di halaman Nabung / ringkasan Home dan lebar di sheet detail. Tetap data milik pengguna, tetap tanpa ilustrasi stok saat kosong (cukup glyph + hairline). WebP ≤960px, di-decode di `Dispatchers.IO` lewat cache kecil — tidak ada pembacaan disk di thread komposisi, dan tidak ada `drawBackdrop` yang menyertainya (aturan kaca overlay tetap berlaku).
 
 ## Accessibility
 
@@ -298,3 +303,4 @@ dengan `amount` bertanda (`+` untuk masuk, `−` untuk keluar). Baris pertama se
 - **2026-11-17 (V1.3):** scrub grafik posisional (tekan-tahan langsung ganti bulan) + strip gestur khusus + pager dinonaktifkan saat scrub; dock baru pindah halaman setelah jari dilepas; klik tab cepat tidak lagi menumpuk animasi; animasi masuk baris transaksi; Time field stepper + preset menggantikan dua Scrubber; sheet detail transaksi sebelum editor; foto pada note (FileProvider + Photo Picker, tanpa permission). Liquid glass dari `Kyant0/AndroidLiquidGlass` dipasang pada dock/wash/FAB sebagai mode **Kaca** opsional dengan toggle **Kertas/Kaca** di Theme — pengecualian terkontrol atas aturan "hindari glassmorphism" di atas.
 - **2026-11-18 (V1.4):** scrub grafik dioptimalkan (`trendFast` + `LazyColumn` stabil) dan strip/caption bawah chart dihapus; Time Input mengikuti `design/time.webp` (field + popover 3 kolom interval); backup/restore ZIP via SAF dengan validasi; dock kapsul penuh yang membesar saat ditahan; penyimpanan pindah ke DataStore per-record; sheet detail dengan navigasi sebelumnya/berikutnya dan hapus tanpa menutup sheet; multi-foto + pinch-zoom + ikon kamera di dalam Note; Setting › Theme › UI untuk memilih kaca per area; Setting › Home untuk tampil/gulir/pin ringkasan nabung; kompresi foto WebP + thumbnail; lima copy redundan dihapus. Referensi baru: `design/time.webp`.
 - **2026-11-18 (patch crash Kaca):** `adb` menemukan `SIGSEGV` native di RenderThread (>500 frame `RenderNode::prepareTreeImpl` berulang, "likely due to stack overflow") saat mode Kaca aktif. Penyebabnya: V1.4 memasang `glassPanel()` pada Ringkasan Home, yaitu **di dalam** subtree yang direkam `LayerBackdrop`; `drawLayer()` lalu mereferensi display list-nya sendiri. Kaca untuk komponen halaman dihapus, `App.kt` menutup akses backdrop di dalam pager lewat `CompositionLocalProvider` bertingkat, `glassAreas` jadi 3 area overlay (Dock / Tombol catat / Sheet), dan preferensi lama disanitasi (`safeUiGlass()` + hard guard `glassPref()` + penulisan ulang `K_UI` saat `load()`). Diuji di perangkat: app cold start + semua area Kaca + sheet kaca + sheet detail, tanpa crash. Rincian di `UPDATE.md`.
+- **2026-11-19 (V1.5):** tab dock terpilih membesar seluruhnya; Time Input jadi field tunggal + grid chip statis; ikon aplikasi baru (sampul aksen + cap plus); baris dan sheet transaksi lebih informatif dengan grid 4 kolom utuh; target nabung dapat gambar, kartu bisa diketuk ke sheet detail + riwayat menabung, dan gambar ikut backup ZIP; palet/nada/aksen custom diperluas dengan pratinjau langsung; umpan balik tekan & spring progress (dengan clamp); versi aplikasi naik ke 1.5 dan tampil di Setting. Penjagaan performa: `savedMap()` satu lintasan, decode gambar di IO + cache, tidak ada `LazyColumn` bersarang, tidak ada spring tanpa clamp. Aturan kaca overlay dari patch crash tidak diubah. Rincian di `UPDATE.md`.

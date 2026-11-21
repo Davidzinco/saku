@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -104,26 +105,35 @@ internal fun Modifier.tap(onClick: () -> Unit): Modifier = clickable(
     interactionSource = MutableInteractionSource(), indication = null, onClick = onClick
 )
 
-/** Ketuk dengan umpan balik tekan: skala 0.97 + redup, transform/opacity saja. */
+/**
+ * Ketuk dengan umpan balik tekan: skala + redup, transform/opacity saja.
+ * V1.5 #7: besaran bisa diatur per komponen (tombol lebih terasa daripada
+ * baris menu). Nilai state dibaca di lambda `graphicsLayer`, jadi animasi
+ * berjalan di fase gambar tanpa memicu recomposition induk.
+ */
 @Composable
-fun Modifier.pressable(onClick: () -> Unit): Modifier {
+fun Modifier.pressable(
+    scale: Float = 0.97f,
+    alpha: Float = 0.9f,
+    onClick: () -> Unit
+): Modifier {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
+    val s by animateFloatAsState(
+        targetValue = if (pressed) scale else 1f,
         animationSpec = tween(Motion.PRESS),
-        label = "tekan"
+        label = "tekanS"
     )
-    val alpha by animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
+    val a by animateFloatAsState(
+        targetValue = if (pressed) alpha else 1f,
         animationSpec = tween(Motion.PRESS),
-        label = "redup"
+        label = "tekanA"
     )
     return this
         .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-            this.alpha = alpha
+            scaleX = s
+            scaleY = s
+            this.alpha = a
         }
         .clickable(interactionSource = source, indication = null, onClick = onClick)
 }
@@ -191,10 +201,16 @@ internal fun Modifier.topHair(color: Color): Modifier = drawBehind {
     drawLine(color, Offset(0f, w / 2f), Offset(size.width, w / 2f), w)
 }
 
-/** Batang progress / track nabung, radius 2dp. */
+/** Batang progress / track nabung, radius 2dp. V1.5 #7: spring, tapi tetap dijepit. */
 @Composable
 fun Track(t: Tok, frac: Float, height: Dp = 4.dp, color: Color = t.pos) {
-    val animated by animateFloatAsState(frac.coerceIn(0f, 1f), tween(320), label = "progress")
+    val animated by animateFloatAsState(
+        targetValue = frac.coerceIn(0f, 1f),
+        // WAJIB clamp nilai animasi: spring bisa overshoot > 1 dan
+        // fillMaxWidth(fraction) melempar exception kalau fraksi di luar 0..1.
+        animationSpec = spring(dampingRatio = 0.9f, stiffness = 320f),
+        label = "progress"
+    )
     Box(
         Modifier
             .fillMaxWidth()
@@ -204,7 +220,7 @@ fun Track(t: Tok, frac: Float, height: Dp = 4.dp, color: Color = t.pos) {
     ) {
         Box(
             Modifier
-                .fillMaxWidth(animated)
+                .fillMaxWidth(animated.coerceIn(0f, 1f))
                 .height(height)
                 .clip(RoundedCornerShape(height / 2))
                 .background(color)
@@ -229,6 +245,8 @@ fun glyphOf(name: String): Ic = when (name) {
     "heart" -> Ic.Heart
     "money" -> Ic.Money
     "wallet" -> Ic.Wallet
+    "image" -> Ic.Image
+    "pin" -> Ic.Pin
     else -> Ic.Dot
 }
 
@@ -583,7 +601,9 @@ fun PrimaryButton(
             .clip(CircleShape)
             .background(if (enabled) t.accent else t.accent.copy(alpha = 0.38f))
             .semantics { contentDescription = label }
-            .tap { if (enabled) onClick() else onDisabledClick?.invoke() },
+            .pressable(scale = 0.98f, alpha = 0.92f) {
+                if (enabled) onClick() else onDisabledClick?.invoke()
+            },
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -609,7 +629,7 @@ fun SecondaryButton(
             .height(48.dp)
             .clip(CircleShape)
             .border(1.dp, t.hair, CircleShape)
-            .tap(onClick),
+            .pressable(scale = 0.98f, alpha = 0.92f, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(label, Type.body.copy(fontWeight = FontWeight.SemiBold), t.ink, align = TextAlign.Center)
@@ -646,7 +666,7 @@ fun Segmented(
                     .fillMaxSize()
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (on) t.accentWash else Color.Transparent)
-                    .tap { onSelect(i) },
+                    .pressable(scale = 0.97f, alpha = 0.92f) { onSelect(i) },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -663,7 +683,11 @@ fun Segmented(
 @Composable
 fun NavRow(t: Tok, icon: Ic, title: String, subtitle: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(60.dp).semantics { contentDescription = title }.tap(onClick),
+        Modifier
+            .fillMaxWidth()
+            .height(60.dp)
+            .semantics { contentDescription = title }
+            .pressable(scale = 0.985f, alpha = 0.94f, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(

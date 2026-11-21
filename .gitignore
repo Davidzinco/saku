@@ -9,6 +9,7 @@ captures/
 # APK rilis per versi sengaja disimpan di repo (unduhan langsung dari GitHub)
 !saku-1.3-debug.apk
 !saku-1.4-debug.apk
+!saku-1.5-debug.apk
 *.aab
 *.iml
 

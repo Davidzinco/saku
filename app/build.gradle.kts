@@ -14,8 +14,10 @@ android {
         applicationId = "id.saku.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // V1.5 #8: versi dibaca PackageManager untuk ditampilkan di Setting.
+        // versionCode naik 1 -> 5 agar pemasangan di atas V1.4 dianggap upgrade.
+        versionCode = 5
+        versionName = "1.5"
     }
 
     buildFeatures { compose = true }

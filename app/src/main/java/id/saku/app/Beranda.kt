@@ -462,8 +462,9 @@ private fun CatSection(t: Tok, saku: Saku, cursor: Calendar, onCatat: () -> Unit
 @Composable
 private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
     if (!saku.showNabungHome) return
+    val savedByGoal = remember(saku.tx) { saku.savedMap() }
     val goals = saku.goals
-    val pinned = saku.goalOf(saku.nabungPinned) ?: goals.maxByOrNull { saku.savedOf(it.id) }
+    val pinned = saku.goalOf(saku.nabungPinned) ?: goals.maxByOrNull { savedByGoal[it.id] ?: 0L }
 
     Column(Modifier.fillMaxWidth().topHair(t.hairSoft).padding(vertical = 10.dp)) {
         if (saku.nabungScroll && goals.isNotEmpty()) {
@@ -472,16 +473,21 @@ private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(goals, key = { it.id }) { g ->
-                    GoalChip(t, saku, g, onNabung)
+                    GoalChip(t, savedByGoal, g, onNabung)
                 }
             }
         } else {
             Row(Modifier.fillMaxWidth().tap(onNabung), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(26.dp).clip(RoundedCornerShape(9.dp)).background(t.accentWash),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Glyph(Ic.Wallet, t.accent, 15.dp)
+                // V1.5 #5: kalau target punya gambar, tampilkan di sini.
+                if (pinned?.image?.isNotEmpty() == true) {
+                    GoalImage(pinned.image, t, 26.dp)
+                } else {
+                    Box(
+                        Modifier.size(26.dp).clip(RoundedCornerShape(9.dp)).background(t.accentWash),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Glyph(Ic.Wallet, t.accent, 15.dp)
+                    }
                 }
                 Spacer(Modifier.width(11.dp))
                 Column(Modifier.weight(1f)) {
@@ -494,7 +500,7 @@ private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
                             Modifier.padding(top = 2.dp)
                         )
                     } else {
-                        val saved = saku.savedOf(pinned.id)
+                        val saved = savedByGoal[pinned.id] ?: 0L
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             if (saku.nabungPinned.isNotEmpty()) {
                                 Glyph(Ic.Pin, t.accent, 12.dp, 1.4.dp)
@@ -518,8 +524,13 @@ private fun NabungRow(t: Tok, saku: Saku, onNabung: () -> Unit) {
 }
 
 @Composable
-private fun GoalChip(t: Tok, saku: Saku, goal: Goal, onNabung: () -> Unit) {
-    val saved = saku.savedOf(goal.id)
+private fun GoalChip(
+    t: Tok,
+    savedByGoal: Map<String, Long>,
+    goal: Goal,
+    onNabung: () -> Unit
+) {
+    val saved = savedByGoal[goal.id] ?: 0L
     Column(
         Modifier
             .width(186.dp)
@@ -528,7 +539,17 @@ private fun GoalChip(t: Tok, saku: Saku, goal: Goal, onNabung: () -> Unit) {
             .tap(onNabung)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Text(goal.name, Type.bodySm.copy(fontWeight = FontWeight.SemiBold), t.ink)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GoalImage(goal.image, t, 30.dp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                goal.name,
+                Type.bodySm.copy(fontWeight = FontWeight.SemiBold),
+                t.ink,
+                Modifier.weight(1f),
+                maxLines = 1
+            )
+        }
         Spacer(Modifier.height(7.dp))
         Track(t, if (goal.target > 0) saved.toFloat() / goal.target.toFloat() else 0f)
         Spacer(Modifier.height(6.dp))
@@ -616,11 +637,18 @@ fun TableHead(t: Tok) {
 
 @Composable
 fun TxRow(t: Tok, saku: Saku, tx: Tx, saldo: Long, newest: Boolean, flash: Boolean, onClick: () -> Unit) {
-    val catName = saku.catOf(tx.cat)?.name ?: "Lainnya"
+    val cat = saku.catOf(tx.cat)
+    val catName = cat?.name ?: "Lainnya"
     val note = tx.note.ifBlank { catName }
+    // V1.5 #4: glyph kategori + penanda lampiran/target, tanpa mengubah grid
+    // 4 kolom (Tgl / Keterangan / Jumlah / Saldo) yang jadi ciri aplikasi.
+    val photoCount = tx.allPhotos.size
+    val hasGoal = tx.goal.isNotEmpty()
     val desc = Fmt.dayLabel(tx.date) + ", " + note + ", " +
         (if (tx.type == "in") "masuk " else "keluar ") + Fmt.num(tx.amount) +
-        ", saldo " + Fmt.num(saldo)
+        ", saldo " + Fmt.num(saldo) +
+        (if (photoCount > 0) ", " + photoCount + " foto" else "") +
+        (if (hasGoal) ", target nabung" else "")
 
     // kilatan singkat saat baris baru ditambah/diubah
     val flashAnim = remember { Animatable(0f) }
@@ -642,11 +670,21 @@ fun TxRow(t: Tok, saku: Saku, tx: Tx, saldo: Long, newest: Boolean, flash: Boole
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(Fmt.tgl(tx.date), Type.label, t.muted2, Modifier.width(40.dp))
+            Column(Modifier.width(40.dp)) {
+                Text(Fmt.tgl(tx.date), Type.label, t.muted2)
+                Text(
+                    Fmt.weekday(tx.date).take(3),
+                    Type.micro,
+                    t.faint,
+                    Modifier.padding(top = 1.dp)
+                )
+            }
             Column(Modifier.weight(1f)) {
-                Text(note, Type.body, t.ink)
+                Text(note, Type.body, t.ink, maxLines = 1)
                 Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(catName, Type.micro, t.muted2)
+                    Glyph(glyphOf(cat?.glyph ?: "dot"), t.muted2, 11.dp, 1.2.dp)
+                    Spacer(Modifier.width(4.dp))
+                    Text(catName, Type.micro, t.muted2, Modifier.weight(1f, fill = false), maxLines = 1)
                     Box(
                         Modifier
                             .padding(horizontal = 4.dp)
@@ -655,6 +693,14 @@ fun TxRow(t: Tok, saku: Saku, tx: Tx, saldo: Long, newest: Boolean, flash: Boole
                             .background(t.muted2.copy(alpha = 0.55f))
                     )
                     Text(tx.time, Type.micro, t.muted2)
+                    if (photoCount > 0) {
+                        Spacer(Modifier.width(4.dp))
+                        Glyph(Ic.Image, t.accent, 10.dp, 1.2.dp)
+                    }
+                    if (hasGoal) {
+                        Spacer(Modifier.width(3.dp))
+                        Glyph(Ic.Pin, t.accent, 10.dp, 1.2.dp)
+                    }
                 }
             }
             Text(

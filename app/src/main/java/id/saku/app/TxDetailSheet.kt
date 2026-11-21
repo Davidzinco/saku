@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
  * V1.4 #6 — ada navigasi transaksi sebelumnya/berikutnya, dan penghapusan tidak
  * menutup sheet mendadak: sheet tetap terbuka dengan konfirmasi + tombol Tutup.
  * V1.4 #7 — beberapa foto, ketuk untuk pratinjau penuh dengan pinch-zoom.
+ * V1.5 #4 — hari, jumlah lampiran, dan asal setoran/penarikan nabung.
  */
 @Composable
 fun TxDetailSheet(
@@ -129,9 +130,16 @@ fun TxDetailSheet(
             DetailRow(t, "Kategori", catName, glyph = saku.catOf(tx.cat)?.glyph)
             DetailRow(t, "Catatan", tx.note.ifBlank { "—" })
             DetailRow(t, "Tanggal", Fmt.longDate(tx.date))
+            // V1.5 #4: hari, jam beserta pembagian waktu, lampiran, dan asal
+            // setoran nabung — semua tetap dalam grammar baris + hairline.
+            DetailRow(t, "Hari", Fmt.weekday(tx.date))
             DetailRow(t, "Waktu", tx.time + " · " + dayPartLabel(tx.time))
+            if (photos.isNotEmpty()) {
+                DetailRow(t, "Lampiran", photos.size.toString() + " foto", glyph = "image")
+            }
             DetailRow(t, "Saldo setelah", Fmt.rp(saku.saldoOf(tx)))
             if (goalName != null) {
+                DetailRow(t, "Jenis", if (isIn) "Tarik dari" else "Setor ke", glyph = "wallet")
                 DetailRow(t, "Target nabung", goalName)
             }
 

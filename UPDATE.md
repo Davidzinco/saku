@@ -1,5 +1,121 @@
-V1.x (upcoming)  
+V1.x (upcoming)
 integrasi scan dan ai serta sync dengan aplikasi lain. persiapan penambahan menu backup to google drvie
+
+V1.6
+1. bootom menu nya belum sesuai, saran saya ambil data dari applikasi "C:\Users\Davidzinco\WorkBuddy AI\2026-11-17-12-42-19\LiquidGlassApp"
+2. redesain jam nya menjadi lebih minimalis simple dan enak di tangan, gunakan semua teori yang ada untuk membuat menu jam yang lebih nyaman
+3. 
+
+
+V1.5 (UI enhancement and polish)
+1. Buat bottom menu yang terselect membesar bukan hanya menunya saja sama kan dengan project "C:\Users\Davidzinco\WorkBuddy AI\2026-11-17-12-42-19\LiquidGlassApp"
+2. buatkan jam nya lebih minimalis dan lebih nyaman serta stylis
+3. change the icon for the app
+4. perdetail informasi yang di tunjukan pada menu transaksi
+5. pada opsi nabung bisa di berikan upload image agar membuat semgant dalam menabung, dan buat agar bsia di tap dan menampilkan tabugnan secara detail serta history kapan kita menabung
+6. pada custom thame perbanyak dan permudah pemiliha theme.
+7. silakan tambah hal yang sekiranya dapat membuat aplikasi nya lebih bagus dan fluit agar enak di liat dan buat tetap
+8. mulai update informasi versi aplikasi karena setiap saya cek selalu menunjukna  V1.0
+
+### Status pengerjaan V1.5 (2026-11-19, selesai)
+
+Implementasi kedua setelah V1.5 sebelumnya direvert. Kali ini perubahan
+**disesuaikan dengan grammar aplikasi** dan dijaga agar tidak menurunkan performa:
+kolom saldo berjalan (ciri khas *Buku Tabungan*) dipertahankan, tidak ada decode
+bitmap di thread komposisi, tidak ada `LazyColumn` bersarang di dalam sheet yang
+sudah menggulir, dan aturan kaca overlay dari patch crash V1.4 tidak dilanggar.
+
+1. **Selesai** — tab dock yang terpilih kini membesar **seluruhnya** (ikon 20→21dp,
+   label ikut, skala 1.14× dengan spring `0.72 / 420`) seperti perilaku indikator
+   di `LiquidGlassApp`; kapsul wash ikut 1.035×. Transform murni lewat
+   `graphicsLayer` dengan state dibaca di lambda, jadi per frame cuma invalidate
+   fase gambar — tidak ada recomposition Dock. Sistem geser/tahan V1.3–V1.4 tidak
+   diubah sama sekali.
+2. **Selesai** — Time Input lebih minimalis: satu field 52dp yang seluruhnya bisa
+   diketuk, angka 20sp, badge AM/PM, chevron; tombol clear berubah jadi "Sekarang"
+   di kepala popover. Popover tiga kolom yang harus digulir diganti **grid chip
+   statis** (jam 8 kolom, menit 6 kolom, AM/PM, 4 preset) — satu ketuk langsung
+   memilih, tanpa scroll bersarang dan tanpa auto-scroll `animateScrollToItem`
+   yang dulu bisa menarik posisi daftar. Tetap tanpa keyboard / inset IME.
+3. **Selesai** — ikon aplikasi diganti: sampul buku tabungan dominan aksen terang
+   (`#8FA5F2`) di atas latar gelap, tiga baris catatan, dan cap "catat" berplus.
+   Masih adaptif + monochrome, tetapi jelas berbeda dari ikon kertas pucat lama.
+4. **Selesai** — informasi transaksi diperkaya **tanpa mengubah grid 4 kolom**:
+   baris tanggal kini menampilkan hari, meta memuat glyph kategori, penanda foto
+   (`Ic.Image`) dan penanda target nabung (`Ic.Pin`), dan deskripsi TalkBack ikut
+   menyebut jumlah lampiran/target. Halaman Transaksi mendapat tiga angka
+   turunan (rata-rata keluar, hari tercatat, jumlah catatan) yang dihitung sekali
+   per bulan. Sheet detail tambah baris Hari, Lampiran, Jenis, dan Target nabung.
+5. **Selesai** — target nabung punya gambar motivasi:
+   - `Goal.image` (default `""`, data V1.4 tetap terbaca) tersimpan di
+     `filesDir/goals/` sebagai WebP ≤960px dengan koreksi EXIF; DataStore dan
+     backup ZIP (`goals/`) ikut membawanya, lengkap dengan path relatif + validasi
+     nama saat impor.
+   - Gambar bisa dipilih **saat membuat target** maupun lewat **Ubah target**.
+     Berkas kamera/galeri masih mentah di `cacheDir` sampai tombol Simpan ditekan:
+     membatalkan sheet tidak menyisakan berkas yatim dan tidak pernah menghapus
+     gambar yang masih dipakai data tersimpan.
+   - Kepala target di halaman Nabung bisa diketuk → **sheet detail** berisi gambar
+     lebar, tersimpan, sisa target, progress, tombol Setor/Tarik, dan **riwayat
+     menabung** (tanggal + jam setiap setoran/penarikan, 8 terbaru + "Lihat semua").
+     Gambar juga muncul di ringkasan/chip Nabung pada Home.
+   - Decode gambar dilakukan di `Dispatchers.IO` lewat `LaunchedEffect` + cache
+     `LruCache` kecil, bukan di komposisi; riwayat memakai `Column` biasa (bukan
+     `LazyColumn`) karena `SheetScaffold` sudah menggulir vertikal.
+   - `savedMap()` menghitung saldo semua target dalam **satu lintasan** transaksi,
+     menggantikan `savedOf()` berulang per target di Home/Nabung.
+6. **Selesai** — Custom theme diperluas & dipermudah: 6 nada kertas (+Mawar,
+   +Laut), 9 palet (+Mawar, +Laut, +Zaitun), 12 swatch aksen. Setting › Theme
+   kini punya **pratinjau langsung** kombinasi custom, grid aksen 6 kolom, dan
+   deretan chip nada kertas yang bisa digeser; memilih salah satu langsung
+   memakai palet custom.
+7. **Selesai** — polish: `pressable(scale, alpha)` dipakai pada tombol utama/
+   sekunder, baris menu Setting, segmen, field Time, dan kartu target; progress
+   `Track` memakai spring dengan **nilai dijepit 0..1** (spring tanpa clamp bisa
+   overshoot dan membuat `fillMaxWidth(fraction)` melempar exception). Grid chip
+   waktu sengaja tetap memakai `tap` biasa supaya 36 chip tidak membuat 72 state
+   animasi. Umpan balik tekan tidak dipasang pada baris `LazyColumn` dan tidak
+   menyentuh FAB kaca.
+8. **Selesai** — `versionCode = 5`, `versionName = "1.5"`; Setting › Data kini
+   menampilkan **Versi** yang dibaca dari `PackageManager` (bukan hardcode), dan
+   footer Setting memakai versi yang sama. `aapt dump badging` membuktikan
+   `versionCode='5' versionName='1.5'`.
+
+**Yang sengaja TIDAK diulang dari V1.5 lama (2026-11-18, direvert):**
+
+- `TxRow` tidak diubah jadi dua kolom — kolom **Saldo** dan header Tgl/Jumlah/
+  Saldo tetap ada, karena itu *signature move* di `DESIGN.md`.
+- Tidak ada `loadGoalImage()` yang men-decode bitmap langsung di dalam komposisi.
+- Tidak ada spring tanpa clamp pada `fillMaxWidth`, tidak ada wheel `LazyColumn`
+  dengan `animateScrollToItem` per perubahan pilihan.
+- Gambar lama tidak dihapus saat pengguna memilih gambar baru tetapi belum simpan.
+
+**Verifikasi build (2026-11-19):**
+
+- `:app:compileDebugKotlin` dan `:app:assembleDebug` **BUILD SUCCESSFUL**; tidak
+  ada warning kode Kotlin baru (hanya warning deprecated plugin Gradle yang sudah
+  ada sejak V1.2). `compileDebugKotlin` dijalankan ulang saat verifikasi lint dan
+  tetap sukses.
+- `:app:lintDebug --rerun-tasks` **BUILD SUCCESSFUL**, **0 error**, 13 warning,
+  12 hint. Semua warning sudah ada di V1.4 (6× `android.media.ExifInterface`,
+  `Bitmap.createScaledBitmap`, posisi parameter `modifier` di `Ui.kt`, versi
+  Gradle/dependensi, `mipmap-anydpi-v26`); tidak ada warning baru dari kode V1.5.
+  Satu-satunya error lint sebelumnya berasal dari `local.properties` lokal
+  (`sdk.dir=C:////Android////sdk` → `PropertyEscape`), bukan dari source: berkas
+  itu ada di `.gitignore` dan sudah diperbaiki menjadi
+  `sdk.dir=C\:\\Android\\Sdk`. Laporan lama sempat ter-cache, sehingga perlu
+  `--rerun-tasks` untuk memaksa analisis ulang.
+- `apksigner verify` → `Verifies` (v2); `aapt dump badging` → minSdk 26,
+  targetSdk 37, `versionCode='5'`, `versionName='1.5'`, ikon adaptif terbaca.
+- APK `saku-1.5-debug.apk` (10.679.533 byte), salinan di root workspace
+  `Saku-V1.5-LiquidGlass.apk`, SHA256
+  `2b0258857c48d0764d32e43fbf1c8fb3a7223c532e54012c01cdc95f3b730591`.
+- **Uji di perangkat belum dilakukan** karena saat pengerjaan tidak ada perangkat
+  `adb` yang terhubung (`adb devices` kosong). Sebelum dipasang di HP utama,
+  disarankan smoke test: buka Setting › Theme (semua area Kaca), buat target
+  nabung + gambar, buka detail/riwayat, simpan transaksi dengan Time Input baru,
+  lalu ekspor/impor backup. Aturan kaca overlay tidak disentuh oleh perubahan ini.
+- Perubahan **belum di-commit / di-push**; repo masih di `a0113ee` (V1.4).
 
 V1.4 (bug fix and add new feature)
 1. untuk slide chart itu kadang transaksi tidak terload, ngelag atau tidak optimal dan hilangkan slider pada bawah chart.

@@ -414,19 +414,60 @@ fun SakuApp() {
                     saved = saku.savedOf(g.goal.id),
                     visible = goalVisible,
                     onDismiss = { closeGoalSheet() },
-                    onSave = { name, target ->
+                    onSave = { name, target, image ->
+                        // V1.5 #5: buang berkas lama hanya SETELAH perubahan
+                        // benar-benar disimpan. Membatalkan sheet tidak pernah
+                        // menghapus gambar yang masih dipakai data tersimpan.
+                        if (image != g.goal.image) deleteGoalImage(g.goal.image)
                         update(
                             saku.copy(
                                 goals = saku.goals.map {
-                                    if (it.id == g.goal.id) it.copy(name = name, target = target) else it
+                                    if (it.id == g.goal.id) it.copy(name = name, target = target, image = image) else it
                                 }
                             )
                         )
                         closeGoalSheet()
                     },
                     onDelete = {
+                        deleteGoalImage(g.goal.image)
                         update(saku.copy(goals = saku.goals.filter { it.id != g.goal.id }))
                         closeGoalSheet()
+                    }
+                )
+            }
+
+            // V1.5 #5: ketuk kartu target -> detail + riwayat kapan menabung.
+            is GoalSheet.Detail -> {
+                BackHandler { closeGoalSheet() }
+                GoalDetailSheet(
+                    t = t,
+                    saku = saku,
+                    goal = g.goal,
+                    visible = goalVisible,
+                    onDismiss = { closeGoalSheet() },
+                    onEdit = {
+                        closeGoalSheet()
+                        scope.launch {
+                            delay(220)
+                            goalSheet = GoalSheet.Ubah(g.goal)
+                            goalVisible = true
+                        }
+                    },
+                    onSetor = {
+                        closeGoalSheet()
+                        scope.launch {
+                            delay(220)
+                            goalSheet = GoalSheet.Setor(g.goal)
+                            goalVisible = true
+                        }
+                    },
+                    onTarik = {
+                        closeGoalSheet()
+                        scope.launch {
+                            delay(220)
+                            goalSheet = GoalSheet.Tarik(g.goal)
+                            goalVisible = true
+                        }
                     }
                 )
             }
@@ -525,6 +566,13 @@ fun Dock(
                     .padding(horizontal = 8.dp)
                     .width(slot - 16.dp)
                     .height(44.dp)
+                    // V1.5 #1: kapsul tab aktif sedikit lebih besar, mengikuti
+                    // perilaku indikator di LiquidGlassApp. Transform murni,
+                    // tidak mengubah ukuran layout maupun posisi slot.
+                    .graphicsLayer {
+                        scaleX = 1.035f
+                        scaleY = 1.035f
+                    }
                     .then(
                         if (glass) {
                             Modifier.glassWash(t, backdrop, washShape())
@@ -541,12 +589,27 @@ fun Dock(
             Tab.entries.forEachIndexed { i, item ->
                 if (i == 2) Spacer(Modifier.width(58.dp))
                 val active = item == current
+                // V1.5 #1 — tab yang terselect membesar SELURUHNYA (ikon + label),
+                // bukan cuma wash di belakangnya. State animasi dibaca di dalam
+                // lambda graphicsLayer, jadi per frame hanya invalidate fase
+                // gambar — tidak ada recomposition Dock tiap frame.
+                val tabScale by animateFloatAsState(
+                    targetValue = if (active) 1.14f else 1f,
+                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 420f),
+                    label = "tabScale_" + item.name
+                )
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .graphicsLayer {
+                            scaleX = tabScale
+                            scaleY = tabScale
+                        },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Glyph(item.icon, if (active) t.accent else t.faint, 20.dp)
+                    Glyph(item.icon, if (active) t.accent else t.faint, if (active) 21.dp else 20.dp)
                     Spacer(Modifier.height(5.dp))
                     Text(
                         item.label,

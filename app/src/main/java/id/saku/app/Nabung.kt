@@ -12,22 +12,31 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.io.File
 import java.util.Calendar
 import java.util.Locale
 
 @Composable
 fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onSheet: (GoalSheet) -> Unit) {
-    val savedTotal = saku.savedTotal()
+    val ctx = LocalContext.current
+    // V1.5 #5: satu lintasan untuk semua target, bukan filter per target.
+    val savedByGoal = remember(saku.tx) { saku.savedMap() }
+    val savedTotal = saku.goals.sumOf { savedByGoal[it.id] ?: 0L }
     val targetTotal = saku.goals.sumOf { it.target }
     val pct = if (targetTotal > 0) (savedTotal * 100 / targetTotal).toInt() else 0
     val shownSaved = animatedLong(savedTotal)
@@ -38,8 +47,15 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onSheet: (GoalSheet) ->
 
     var newName by remember { mutableStateOf("") }
     var newTarget by remember { mutableStateOf("") }
+    var newRawImage by remember { mutableStateOf<String?>(null) }
     val targetValue = newTarget.toLongOrNull() ?: 0L
     val canSave = newName.isNotBlank() && targetValue > 0L
+
+    // Berkas mentah dibuang bila halaman ditinggalkan tanpa menyimpan target.
+    val pendingState = rememberUpdatedState(newRawImage)
+    DisposableEffect(Unit) {
+        onDispose { discardRawImage(pendingState.value) }
+    }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
         ScreenHeader(t, "Nabung", back = false)
@@ -77,12 +93,25 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onSheet: (GoalSheet) ->
         }
 
         saku.goals.forEach { goal ->
-            val saved = saku.savedOf(goal.id)
+            val saved = savedByGoal[goal.id] ?: 0L
             val frac = if (goal.target > 0) saved.toFloat() / goal.target.toFloat() else 0f
             val goalPct = (frac * 100).toInt().coerceIn(0, 100)
 
             Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // V1.5 #5: seluruh kepala target bisa diketuk -> detail + riwayat.
+                // Tetap satu baris dengan hairline, bukan kartu bertumpuk.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .pressable(scale = 0.99f, alpha = 0.96f) {
+                            onSheet(GoalSheet.Detail(goal))
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GoalImage(goal.image, t, 44.dp)
+                    Spacer(Modifier.width(10.dp))
                     Text(
                         goal.name,
                         Type.body.copy(fontWeight = FontWeight.SemiBold),
@@ -91,7 +120,10 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onSheet: (GoalSheet) ->
                         maxLines = 2
                     )
                     Text(goalPct.toString() + "%", Type.figure, t.muted2)
+                    Spacer(Modifier.width(6.dp))
+                    Glyph(Ic.ChevR, t.muted2, 14.dp)
                 }
+                Spacer(Modifier.height(4.dp))
                 Spacer(Modifier.height(8.dp))
                 Track(t, frac)
                 Spacer(Modifier.height(6.dp))
@@ -155,14 +187,37 @@ fun Nabung(saku: Saku, t: Tok, onChange: (Saku) -> Unit, onSheet: (GoalSheet) ->
                 style = Type.body
             )
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(14.dp))
+        Hair(t.hairSoft)
+        Spacer(Modifier.height(10.dp))
+        // V1.5 #5: gambar boleh dipilih langsung saat target dibuat. Berkas
+        // baru dikompres ke folder goals/ pada saat tombol Simpan ditekan.
+        GoalImagePicker(
+            t = t,
+            previewPath = newRawImage ?: "",
+            onPick = { path ->
+                if (newRawImage != null && newRawImage != path) discardRawImage(newRawImage)
+                invalidateGoalImageCache(path)
+                newRawImage = path
+            },
+            onClear = {
+                discardRawImage(newRawImage)
+                newRawImage = null
+            }
+        )
+
+        Spacer(Modifier.height(14.dp))
         PrimaryButton("Simpan target", t, enabled = canSave) {
+            val image = newRawImage?.let { storeGoalImage(ctx, File(it)) ?: "" } ?: ""
+            discardRawImage(newRawImage)
+            newRawImage = null
             onChange(
                 saku.copy(
                     goals = saku.goals + Goal(
                         id = "g" + System.nanoTime().toString(36),
                         name = newName.trim(),
-                        target = targetValue
+                        target = targetValue,
+                        image = image
                     )
                 )
             )

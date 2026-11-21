@@ -4,24 +4,38 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- lembar buku tabungan -->
+    <!-- V1.5 #3 — ikon baru: sampul buku tabungan memakai aksen terang
+         (dulu kertas pucat + cap kecil), jadi tetap terbaca di latar gelap. -->
+    <!-- sampul -->
     <path
-        android:fillColor="#ECEFE7"
-        android:pathData="M32,26h44a8,8 0 0 1 8,8v40a8,8 0 0 1 -8,8h-44a8,8 0 0 1 -8,-8v-40a8,8 0 0 1 8,-8z" />
-    <!-- garis keterangan -->
+        android:fillColor="#8FA5F2"
+        android:pathData="M38,26h32a12,12 0 0 1 12,12v32a12,12 0 0 1 -12,12h-32a12,12 0 0 1 -12,-12v-32a12,12 0 0 1 12,-12z" />
+    <!-- tulang buku -->
     <path
         android:fillColor="#1B2721"
-        android:pathData="M36,39h26a2,2 0 0 1 0,4h-26a2,2 0 0 1 0,-4z" />
+        android:fillAlpha="0.35"
+        android:pathData="M33,38h3v32h-3z" />
+    <!-- tiga baris catatan -->
     <path
         android:fillColor="#1B2721"
-        android:fillAlpha="0.65"
-        android:pathData="M36,50h20a2,2 0 0 1 0,4h-20a2,2 0 0 1 0,-4z" />
+        android:fillAlpha="0.9"
+        android:pathData="M42,42h28v3.5h-28z" />
+    <path
+        android:fillColor="#1B2721"
+        android:fillAlpha="0.62"
+        android:pathData="M42,51h22v3.5h-22z" />
     <path
         android:fillColor="#1B2721"
         android:fillAlpha="0.4"
-        android:pathData="M36,61h14a2,2 0 0 1 0,4h-14a2,2 0 0 1 0,-4z" />
-    <!-- cap cobalt di pojok -->
+        android:pathData="M42,60h16v3.5h-16z" />
+    <!-- cap "catat" -->
+    <path
+        android:fillColor="#ECEFE7"
+        android:pathData="M70,59a11,11 0 1 0 0,22a11,11 0 1 0 0,-22z" />
     <path
         android:fillColor="#23418F"
-        android:pathData="M70,60h6a3,3 0 0 1 3,3v6a3,3 0 0 1 -3,3h-6a3,3 0 0 1 -3,-3v-6a3,3 0 0 1 3,-3z" />
+        android:pathData="M64,68.75h12v2.5h-12z" />
+    <path
+        android:fillColor="#23418F"
+        android:pathData="M68.75,64h2.5v12h-2.5z" />
 </vector>
