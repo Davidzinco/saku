@@ -79,7 +79,7 @@ fun AmountSheet(
                 Box(
                     Modifier
                         .weight(1f)
-                        .height(38.dp)
+                        .height(44.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .border(1.dp, t.hair, RoundedCornerShape(10.dp))
                         .tap { digits = q.toString() },
@@ -192,7 +192,7 @@ fun GoalDetailSheet(
                     Text(
                         "Tarik",
                         Type.body.copy(fontWeight = FontWeight.SemiBold),
-                        if (saved > 0) t.ink else t.faint
+                        if (saved > 0) t.ink else t.muted2
                     )
                 }
             }

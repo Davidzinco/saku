@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ImageView
+        android:id="@+id/widget_bg_fill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg_fill" />
+
+    <ImageView
+        android:id="@+id/widget_bg_stroke"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg_stroke" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="4dp">
+
+        <!-- Band 1: Header (Brand + Month + Selisih; right-padded 38dp+10dp=48dp clear of 44dp Eye wrapper) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="20dp"
+            android:orientation="horizontal"
+            android:paddingEnd="38dp">
+
+            <TextView
+                android:id="@+id/widget_brand"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/archivo_bold"
+                android:includeFontPadding="false"
+                android:letterSpacing="0.18"
+                android:maxLines="1"
+                android:text="@string/widget_brand"
+                android:textColor="#FF1C1C1B"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/widget_month"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:fontFamily="@font/archivo_medium"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="@string/widget_month_default"
+                android:textColor="#FF5E5E5C"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/widget_diff"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:fontFamily="@font/archivo_semibold"
+                android:fontFeatureSettings="tnum"
+                android:gravity="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="@string/widget_diff_default"
+                android:textColor="#FF5E5E5C"
+                android:textSize="9.5sp" />
+        </LinearLayout>
+
+        <!-- Band 2: Hero Balance + Masuk/Keluar Flow (right-padded 38dp+10dp=48dp clear of Eye wrapper) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingEnd="38dp">
+
+            <TextView
+                android:id="@+id/widget_balance"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:autoSizeMaxTextSize="19sp"
+                android:autoSizeMinTextSize="10sp"
+                android:autoSizeStepGranularity="1sp"
+                android:autoSizeTextType="uniform"
+                android:ellipsize="end"
+                android:fontFamily="@font/newsreader_regular"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.018"
+                android:maxLines="1"
+                android:text="@string/widget_balance_default"
+                android:textColor="#FF1C1C1B"
+                android:textSize="19sp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_income"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/archivo_semibold"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="@string/widget_income_default"
+                    android:textColor="#FF39704F"
+                    android:textSize="9.5sp" />
+
+                <TextView
+                    android:id="@+id/widget_outcome"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/archivo_semibold"
+                    android:fontFeatureSettings="tnum"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:text="@string/widget_outcome_default"
+                    android:textColor="#FFA33A2B"
+                    android:textSize="9.5sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Hairline Divider (ImageView satisfies @RemoteView) -->
+        <ImageView
+            android:id="@+id/widget_divider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="3dp"
+            android:layout_marginBottom="2dp"
+            android:background="#141C1C1B"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY" />
+
+        <!-- Band 3: 2 Recent Transactions (Left) + Dual Quick Actions (Right) -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:minHeight="44dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_tx_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/archivo_medium"
+                    android:includeFontPadding="false"
+                    android:maxLines="2"
+                    android:text="@string/widget_tx_empty"
+                    android:textColor="#FF5E5E5C"
+                    android:textSize="9.5sp"
+                    android:visibility="visible" />
+
+                <LinearLayout
+                    android:id="@+id/widget_tx_1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/widget_tx_1_note"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/archivo_medium"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:textColor="#FF1C1C1B"
+                        android:textSize="9.5sp" />
+
+                    <TextView
+                        android:id="@+id/widget_tx_1_amt"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/archivo_semibold"
+                        android:fontFeatureSettings="tnum"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:textColor="#FF1C1C1B"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/widget_tx_2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/widget_tx_2_note"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/archivo_medium"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:textColor="#FF1C1C1B"
+                        android:textSize="9.5sp" />
+
+                    <TextView
+                        android:id="@+id/widget_tx_2_amt"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/archivo_semibold"
+                        android:fontFeatureSettings="tnum"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:textColor="#FF1C1C1B"
+                        android:textSize="9.5sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:id="@+id/widget_out_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:clickable="true"
+                    android:contentDescription="@string/widget_cd_out"
+                    android:focusable="true">
+
+                    <FrameLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center_vertical">
+
+                        <ImageView
+                            android:id="@+id/widget_out_bg"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:importantForAccessibility="no"
+                            android:scaleType="fitXY"
+                            android:src="@drawable/widget_pill_fill" />
+
+                        <ImageView
+                            android:id="@+id/widget_out_stroke"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:importantForAccessibility="no"
+                            android:scaleType="fitXY"
+                            android:src="@drawable/widget_pill_stroke" />
+
+                        <TextView
+                            android:id="@+id/widget_out_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:autoSizeMaxTextSize="10.5sp"
+                            android:autoSizeMinTextSize="8.5sp"
+                            android:autoSizeStepGranularity="0.5sp"
+                            android:autoSizeTextType="uniform"
+                            android:fontFamily="@font/archivo_semibold"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:paddingStart="7dp"
+                            android:paddingEnd="7dp"
+                            android:text="@string/widget_btn_out"
+                            android:textColor="#FFA33A2B"
+                            android:textSize="10.5sp" />
+                    </FrameLayout>
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/widget_in_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="4dp"
+                    android:clickable="true"
+                    android:contentDescription="@string/widget_cd_in"
+                    android:focusable="true">
+
+                    <FrameLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center_vertical">
+
+                        <ImageView
+                            android:id="@+id/widget_in_bg"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:contentDescription="@null"
+                            android:importantForAccessibility="no"
+                            android:scaleType="fitXY"
+                            android:src="@drawable/widget_btn_bg" />
+
+                        <TextView
+                            android:id="@+id/widget_in_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:autoSizeMaxTextSize="10.5sp"
+                            android:autoSizeMinTextSize="8.5sp"
+                            android:autoSizeStepGranularity="0.5sp"
+                            android:autoSizeTextType="uniform"
+                            android:fontFamily="@font/archivo_semibold"
+                            android:gravity="center"
+                            android:includeFontPadding="false"
+                            android:maxLines="1"
+                            android:paddingStart="7dp"
+                            android:paddingEnd="7dp"
+                            android:text="@string/widget_btn_in"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="10.5sp" />
+                    </FrameLayout>
+                </FrameLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 44×44dp Eye Toggle Touch Wrapper anchored top-end (x=[W-48, W-4], y=[0, 44]) -->
+    <FrameLayout
+        android:id="@+id/widget_eye_btn"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="0dp"
+        android:layout_marginEnd="4dp"
+        android:clickable="true"
+        android:contentDescription="@string/widget_cd_eye_hide"
+        android:focusable="true">
+
+        <ImageView
+            android:id="@+id/widget_eye_bg"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:src="@drawable/widget_circle_fill" />
+
+        <ImageView
+            android:id="@+id/widget_eye_icon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="10dp"
+            android:layout_marginEnd="12dp"
+            android:contentDescription="@null"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_ic_eye" />
+    </FrameLayout>
+</FrameLayout>

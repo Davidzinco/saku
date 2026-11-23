@@ -51,31 +51,39 @@ val Tones = listOf(
     PaperTone("krem", "Krem", 0xFFF1EBE1, 0xFFFAF6EF, 0xFF2B2119, 0xFF191513, 0xFF231D19, 0xFFF0E8DD),
     PaperTone("netral", "Netral", 0xFFEEEEEC, 0xFFF9F9F7, 0xFF1C1C1B, 0xFF131313, 0xFF1D1D1C, 0xFFEAEAE7),
     PaperTone("biru", "Biru", 0xFFE6ECF2, 0xFFF5F8FB, 0xFF182430, 0xFF111820, 0xFF1A232C, 0xFFE3EAF1),
-    // V1.5 #6 — dua nada kertas tambahan. Pasangan tinta/kertas tetap kontras
-    // tinggi seperti nada bawaan (lightness tinta jauh di bawah/atas kertas).
+    // V1.5 #6 — dua nada kertas tambahan.
     PaperTone("mawar", "Mawar", 0xFFF2E8EC, 0xFFFAF2F5, 0xFF2B1D22, 0xFF1A1316, 0xFF24191D, 0xFFEFE3E8),
-    PaperTone("laut", "Laut", 0xFFE2EAEF, 0xFFF0F6FA, 0xFF1A2630, 0xFF101820, 0xFF19232C, 0xFFDDE6ED)
+    PaperTone("laut", "Laut", 0xFFE2EAEF, 0xFFF0F6FA, 0xFF1A2630, 0xFF101820, 0xFF19232C, 0xFFDDE6ED),
+    // V1.6.8 #7 — nada tambahan: Obsidian (gelap pekat), Pasir (hangat), Sage (sejuk).
+    PaperTone("obsidian", "Obsidian", 0xFFEAECF0, 0xFFF7F8FA, 0xFF14171F, 0xFF0B0E14, 0xFF141923, 0xFFECF0F7),
+    PaperTone("pasir", "Pasir", 0xFFF3ECE0, 0xFFFCF8F0, 0xFF2C2217, 0xFF1A1510, 0xFF251E17, 0xFFF2E9DC)
 )
 
 data class Palette(val id: String, val name: String, val tone: PaperTone, val accent: Long)
 
 val Palettes = listOf(
+    Palette("mono", "Monokrom", Tones[2], 0xFF3A3A38),
     Palette("kertas", "Kertas", Tones[0], 0xFF23418F),
+    Palette("obsidian", "Obsidian", Tones[6], 0xFF3B6EF5),
     Palette("krem", "Krem & Terakota", Tones[1], 0xFFA8542F),
     Palette("baja", "Baja", Tones[3], 0xFF2C5D8A),
     Palette("hutan", "Hutan", Tones[0], 0xFF2F6B4F),
     Palette("ungu", "Ungu", Tones[2], 0xFF5B4BA8),
-    Palette("mono", "Monokrom", Tones[2], 0xFF3A3A38),
-    // V1.5 #6 — palet tambahan, masih satu nada kertas + satu aksen.
     Palette("mawar", "Mawar", Tones[4], 0xFFA33F63),
     Palette("laut", "Laut", Tones[5], 0xFF1A6B8A),
-    Palette("zaitun", "Zaitun", Tones[0], 0xFF5F6329)
+    Palette("zaitun", "Zaitun", Tones[0], 0xFF5F6329),
+    // V1.6.8 #7 — perluasan koleksi tema siap pakai
+    Palette("senja", "Senja", Tones[7], 0xFFC2592B),
+    Palette("zamrud", "Zamrud", Tones[6], 0xFF178062),
+    Palette("indigo", "Indigo", Tones[3], 0xFF3F46B5),
+    Palette("kopi", "Kopi", Tones[7], 0xFF7B4B2A)
 )
 
-/** Aksen untuk palet custom — V1.5 #6: 12 warna, ditata 6 kolom di Setting. */
+/** Aksen untuk palet custom — V1.6.8 #7: 18 warna dalam grid 6×3. */
 val AccentSwatches = listOf(
-    0xFF23418F, 0xFF2C5D8A, 0xFF0F6E6E, 0xFF2F6B4F, 0xFF5F6329, 0xFF3A3A38,
-    0xFF5B4BA8, 0xFFA8542F, 0xFFB03060, 0xFF1A6B8A, 0xFF8A5A2B, 0xFF7A3F6E
+    0xFF23418F, 0xFF3B6EF5, 0xFF2C5D8A, 0xFF1A6B8A, 0xFF0F6E6E, 0xFF178062,
+    0xFF2F6B4F, 0xFF5F6329, 0xFF3A3A38, 0xFF3F46B5, 0xFF5B4BA8, 0xFF7A3F6E,
+    0xFFA33F63, 0xFFB03060, 0xFFC2592B, 0xFFA8542F, 0xFF8A5A2B, 0xFF7B4B2A
 )
 
 fun toneOf(id: String): PaperTone = Tones.firstOrNull { it.id == id } ?: Tones[0]

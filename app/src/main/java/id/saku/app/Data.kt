@@ -29,19 +29,53 @@ data class Tx(
     val id: String,
     val date: String,      // yyyy-MM-dd
     val time: String,      // HH:mm
-    val type: String,      // "in" | "out"
+    val type: String,      // "in" | "out" | "transfer"
     val amount: Long,      // selalu positif
     val cat: String,
     val note: String,
     val goal: String = "",            // id target nabung, kalau transaksi ini setoran/penarikan
     val photo: String = "",           // V1.3, path tunggal — tetap dibaca untuk data lama
-    val photos: List<String> = emptyList()   // V1.4 #7, beberapa lampiran
+    val photos: List<String> = emptyList(),   // V1.4 #7, beberapa lampiran
+    val account: String = "tunai",    // V1.6.8 #1: sumber dana asal/utama
+    val toAccount: String = ""        // V1.6.8 #1: sumber dana tujuan saat type == "transfer"
 ) {
-    val signed: Long get() = if (type == "in") amount else -amount
+    /** Dampak pada total saldo keseluruhan; pindah saldo antar sumber dana = 0. */
+    val signed: Long
+        get() = when (type) {
+            "in" -> amount
+            "out" -> -amount
+            else -> 0L
+        }
+
+    /** Dampak transaksi terhadap satu sumber dana tertentu. */
+    fun signedFor(accountId: String): Long = when (type) {
+        "in" -> if (account == accountId) amount else 0L
+        "out" -> if (account == accountId) -amount else 0L
+        "transfer" -> when {
+            account == accountId -> -amount
+            toAccount == accountId -> amount
+            else -> 0L
+        }
+        else -> 0L
+    }
+
     /** Satu sumber kebenaran untuk foto: data lama (photo) maupun baru (photos). */
     val allPhotos: List<String>
         get() = photos.ifEmpty { listOfNotNull(photo.takeIf { it.isNotEmpty() }) }
 }
+
+/** V1.6.8 #1 — sumber dana (Tunai, E-Wallet, atau tambahan pengguna). */
+data class Account(
+    val id: String,
+    val name: String,
+    val kind: String = "cash", // "cash" | "ewallet" | "bank" | "other"
+    val glyph: String = "wallet"
+)
+
+fun defaultAccounts() = listOf(
+    Account("tunai", "Tunai", "cash", "money"),
+    Account("ewallet", "E-Wallet", "ewallet", "wallet")
+)
 
 /** Kategori dibedakan lewat glyph, bukan warna (DESIGN.md § Color aturan 2). */
 data class Cat(val id: String, val name: String, val glyph: String)
@@ -89,7 +123,15 @@ data class Saku(
     val uiGlass: Map<String, Boolean> = emptyMap(),
     val showNabungHome: Boolean = true,
     val nabungScroll: Boolean = false,
-    val nabungPinned: String = ""
+    val nabungPinned: String = "",
+    // V1.6.8: sumber dana, gaya beranda, privasi saldo, deteksi notifikasi, onboarding
+    val accounts: List<Account> = defaultAccounts(),
+    val multiAccount: Boolean = true,
+    val splitBalance: Boolean = true,
+    val homeStyle: String = "baru",       // "baru" | "klasik"
+    val hideBalance: Boolean = false,
+    val notifDetect: Boolean = false,
+    val onboarded: Boolean = false
 )
 
 /**
@@ -250,6 +292,172 @@ fun Saku.goalOf(id: String): Goal? = goals.firstOrNull { it.id == id }
 fun Saku.goalHistory(goalId: String): List<Tx> = tx.filter { it.goal == goalId }
     .sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time })
 
+/**
+ * V1.6.8 #4 — hasil perhitungan satu bulan dalam satu lintasan transaksi.
+ * Menggantikan panggilan terpisah `monthTxs` + `runningBalances` + `income` +
+ * `outcome` + `spendingByCat` yang dulu menyaring seluruh `saku.tx` berulang kali.
+ */
+data class MonthSnapshot(
+    val rows: List<Tx>,
+    val running: List<Long>,
+    val income: Long,
+    val outcome: Long,
+    val diff: Long,
+    val avgOut: Long,
+    val activeDays: Int,
+    val spendingByCat: List<Pair<Cat, Long>>
+)
+
+fun Saku.defaultAccountId(): String = accounts.firstOrNull()?.id ?: "tunai"
+fun Saku.accountOf(id: String): Account? = accounts.firstOrNull { it.id == id }
+fun Saku.countForAccount(accountId: String): Int =
+    tx.count { it.account == accountId || it.toAccount == accountId }
+
+/** V1.6.8 #1 — saldo per sumber dana dalam satu lintasan transaksi. */
+fun Saku.accountBalances(): Map<String, Long> {
+    val map = LinkedHashMap<String, Long>(accounts.size)
+    val fallback = defaultAccountId()
+    accounts.forEach { map[it.id] = 0L }
+    tx.forEach { t ->
+        val src = if (t.account.isNotEmpty() && map.containsKey(t.account)) t.account else fallback
+        when (t.type) {
+            "in" -> map[src] = (map[src] ?: 0L) + t.amount
+            "out" -> map[src] = (map[src] ?: 0L) - t.amount
+            "transfer" -> {
+                map[src] = (map[src] ?: 0L) - t.amount
+                val dst = if (t.toAccount.isNotEmpty() && map.containsKey(t.toAccount)) t.toAccount else null
+                if (dst != null) map[dst] = (map[dst] ?: 0L) + t.amount
+            }
+        }
+    }
+    return map
+}
+
+fun Saku.monthSnapshot(c: Calendar, accountFilter: String? = null): MonthSnapshot {
+    val year = c.get(Calendar.YEAR)
+    val month = c.get(Calendar.MONTH) + 1
+    val prefix = String.format(Locale.US, "%04d-%02d", year, month)
+    val nextYear = if (month == 12) year + 1 else year
+    val nextMonth = if (month == 12) 1 else month + 1
+    val nextKey = String.format(Locale.US, "%04d-%02d-01", nextYear, nextMonth)
+    val fallback = defaultAccountId()
+
+    var endBal = 0L
+    var inc = 0L
+    var out = 0L
+    var outCount = 0
+    val days = HashSet<String>()
+    val catTotals = HashMap<String, Long>()
+    val monthList = ArrayList<Tx>()
+
+    tx.forEach { t ->
+        val effAccount = if (t.account.isNotEmpty()) t.account else fallback
+        val delta = if (accountFilter == null) {
+            t.signed
+        } else {
+            when (t.type) {
+                "in" -> if (effAccount == accountFilter) t.amount else 0L
+                "out" -> if (effAccount == accountFilter) -t.amount else 0L
+                "transfer" -> when {
+                    effAccount == accountFilter -> -t.amount
+                    t.toAccount == accountFilter -> t.amount
+                    else -> 0L
+                }
+                else -> 0L
+            }
+        }
+        if (t.date < nextKey) endBal += delta
+        if (t.date.startsWith(prefix)) {
+            val matches = accountFilter == null || effAccount == accountFilter || t.toAccount == accountFilter
+            if (matches) {
+                monthList.add(t)
+                days.add(t.date)
+                if (accountFilter == null) {
+                    if (t.type == "in") inc += t.amount
+                    else if (t.type == "out") {
+                        out += t.amount
+                        outCount++
+                        catTotals[t.cat] = (catTotals[t.cat] ?: 0L) + t.amount
+                    }
+                } else {
+                    if (delta > 0) inc += delta
+                    else if (delta < 0) {
+                        out += -delta
+                        outCount++
+                        if (t.type == "out") {
+                            catTotals[t.cat] = (catTotals[t.cat] ?: 0L) + t.amount
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val rows = monthList.sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time })
+    var acc = endBal
+    val running = rows.map { row ->
+        val here = acc
+        val effAccount = if (row.account.isNotEmpty()) row.account else fallback
+        val delta = if (accountFilter == null) {
+            row.signed
+        } else {
+            when (row.type) {
+                "in" -> if (effAccount == accountFilter) row.amount else 0L
+                "out" -> if (effAccount == accountFilter) -row.amount else 0L
+                "transfer" -> when {
+                    effAccount == accountFilter -> -row.amount
+                    row.toAccount == accountFilter -> row.amount
+                    else -> 0L
+                }
+                else -> 0L
+            }
+        }
+        acc -= delta
+        here
+    }
+
+    val byCat = catTotals.entries
+        .filter { it.value > 0L }
+        .map { (id, total) -> (catOf(id) ?: Cat(id, "Lainnya", "dot")) to total }
+        .sortedByDescending { it.second }
+
+    return MonthSnapshot(
+        rows = rows,
+        running = running,
+        income = inc,
+        outcome = out,
+        diff = inc - out,
+        avgOut = if (outCount > 0) out / outCount else 0L,
+        activeDays = days.size,
+        spendingByCat = byCat
+    )
+}
+
+/** V1.6.8 #5 — daftar bulan (yyyy-MM) yang memiliki transaksi, terbaru dulu. */
+fun Saku.availableMonths(): List<Pair<String, Int>> {
+    val counts = LinkedHashMap<String, Int>()
+    tx.forEach { t ->
+        if (t.date.length >= 7) {
+            val ym = t.date.substring(0, 7)
+            counts[ym] = (counts[ym] ?: 0) + 1
+        }
+    }
+    return counts.entries.sortedByDescending { it.key }.map { it.key to it.value }
+}
+
+/** V1.6.8 #5 — hapus transaksi di satu bulan tertentu; mengembalikan Saku baru + daftar foto untuk dihapus. */
+fun Saku.withoutMonth(ym: String): Pair<Saku, List<String>> {
+    val removed = tx.filter { it.date.startsWith(ym) }
+    val photos = removed.flatMap { it.allPhotos }
+    return copy(tx = tx.filterNot { it.date.startsWith(ym) }) to photos
+}
+
+/** V1.6.8 #5 — hapus seluruh transaksi & target nabung; pengaturan tema tetap terjaga. */
+fun Saku.clearedAll(): Pair<Saku, List<String>> {
+    val files = tx.flatMap { it.allPhotos } + goals.mapNotNull { it.image.takeIf(String::isNotEmpty) }
+    return copy(tx = emptyList(), goals = emptyList(), nabungPinned = "") to files
+}
+
 fun Saku.withTx(tx: Tx): Saku = copy(
     tx = (this.tx.filter { it.id != tx.id } + tx)
         .sortedWith(compareByDescending<Tx> { it.date }.thenByDescending { it.time })
@@ -312,16 +520,35 @@ object Fmt {
     fun dateTime(dateIso: String, time: String): String =
         dayWithYear.format(parse(dateIso)) + " · " + time
 
-    /** "Kamis" untuk baris detail transaksi (V1.5 #4). */
-    fun weekday(dateIso: String): String = weekdayFmt.format(parse(dateIso))
+    private val weekdayCache = HashMap<String, String>()
+    private val weekdayShortCache = HashMap<String, String>()
+
+    /** "Kamis" untuk baris detail transaksi (V1.5 #4), dicache agar scroll mulus. */
+    fun weekday(dateIso: String): String =
+        weekdayCache.getOrPut(dateIso) { weekdayFmt.format(parse(dateIso)) }
+
+    /** "Kam" untuk kolom tanggal di TxRow (V1.6.8 #4). */
+    fun weekdayShort(dateIso: String): String =
+        weekdayShortCache.getOrPut(dateIso) { weekday(dateIso).take(3) }
+
+    /** "2026-11" -> "November 2026" untuk menu hapus data per bulan (V1.6.8 #5). */
+    fun ymLabel(ym: String): String = try {
+        monthYear.format(parse("$ym-01"))
+    } catch (e: Exception) {
+        ym
+    }
+
+    /** Masking nominal saat ikon mata disembunyikan (V1.6.8 #9). */
+    fun masked(v: Long, hide: Boolean): String = if (hide) "\u2022\u2022\u2022\u2022\u2022\u2022" else num(v)
+    fun rpMasked(v: Long, hide: Boolean): String = if (hide) "Rp \u2022\u2022\u2022\u2022\u2022\u2022" else rp(v)
 
     fun nowTime(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
 
     /** Versi aplikasi dibaca dari PackageManager, bukan hardcode di UI. */
     fun appVersion(ctx: Context): String = try {
-        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.5"
+        ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.6.8"
     } catch (e: Exception) {
-        "1.5"
+        "1.6.8"
     }
 
     /** "9:5" / "0905" / "09:05" → "09:05"; null kalau belum valid. */
@@ -357,6 +584,8 @@ fun encodeTx(t: Tx): String = JSONObject().apply {
     put("note", t.note); put("goal", t.goal)
     if (t.photo.isNotEmpty()) put("photo", t.photo)
     put("photos", JSONArray().apply { t.allPhotos.forEach { put(it) } })
+    if (t.account.isNotEmpty()) put("account", t.account)
+    if (t.toAccount.isNotEmpty()) put("toAccount", t.toAccount)
 }.toString()
 
 fun decodeTx(raw: String): Tx = JSONObject(raw).let { t ->
@@ -372,8 +601,36 @@ fun decodeTx(raw: String): Tx = JSONObject(raw).let { t ->
         photo = t.optString("photo", ""),
         photos = t.optJSONArray("photos")?.let { a ->
             (0 until a.length()).map { a.optString(it, "") }.filter { it.isNotEmpty() }
-        } ?: emptyList()
+        } ?: emptyList(),
+        account = t.optString("account", "tunai").ifBlank { "tunai" },
+        toAccount = t.optString("toAccount", "")
     )
+}
+
+private fun encodeAccounts(list: List<Account>): String = JSONArray().apply {
+    list.forEach {
+        put(JSONObject().apply {
+            put("id", it.id); put("name", it.name); put("kind", it.kind); put("glyph", it.glyph)
+        })
+    }
+}.toString()
+
+private fun decodeAccounts(raw: String?): List<Account> = try {
+    if (raw.isNullOrBlank()) defaultAccounts() else JSONArray(raw).let { a ->
+        (0 until a.length()).mapNotNull { i ->
+            runCatching {
+                val c = a.getJSONObject(i)
+                Account(
+                    id = c.getString("id"),
+                    name = c.optString("name", "Tunai"),
+                    kind = c.optString("kind", "cash"),
+                    glyph = c.optString("glyph", "wallet")
+                )
+            }.getOrNull()
+        }
+    }.takeIf { it.isNotEmpty() } ?: defaultAccounts()
+} catch (e: Exception) {
+    defaultAccounts()
 }
 
 private fun encodeCats(list: List<Cat>): String = JSONArray().apply {
@@ -421,10 +678,11 @@ private fun decodeGoals(raw: String?): List<Goal> = try {
 }
 
 fun encodeSaku(s: Saku): String = JSONObject().apply {
-    put("v", 2)
+    put("v", 3)
     put("tx", JSONArray().apply { s.tx.forEach { put(JSONObject(encodeTx(it))) } })
     put("cats", JSONArray(encodeCats(s.cats)))
     put("goals", JSONArray(encodeGoals(s.goals)))
+    put("accounts", JSONArray(encodeAccounts(s.accounts)))
     put("dark", s.dark)
     put("palette", s.paletteId)
     put("accent", s.customAccent)
@@ -436,6 +694,12 @@ fun encodeSaku(s: Saku): String = JSONObject().apply {
     put("showNabungHome", s.showNabungHome)
     put("nabungScroll", s.nabungScroll)
     put("nabungPinned", s.nabungPinned)
+    put("multiAccount", s.multiAccount)
+    put("splitBalance", s.splitBalance)
+    put("homeStyle", s.homeStyle)
+    put("hideBalance", s.hideBalance)
+    put("notifDetect", s.notifDetect)
+    put("onboarded", s.onboarded)
 }.toString()
 
 fun decodeSaku(raw: String): Saku = try {
@@ -450,6 +714,7 @@ fun decodeSaku(raw: String): Saku = try {
         tx = tx,
         cats = decodeCats(o.optJSONArray("cats")?.toString()),
         goals = decodeGoals(o.optJSONArray("goals")?.toString()),
+        accounts = decodeAccounts(o.optJSONArray("accounts")?.toString()),
         dark = o.optBoolean("dark", true),
         paletteId = o.optString("palette", "mono"),
         customAccent = o.optLong("accent", 0xFF23418F),
@@ -460,7 +725,13 @@ fun decodeSaku(raw: String): Saku = try {
         uiGlass = ui.safeUiGlass(),
         showNabungHome = o.optBoolean("showNabungHome", true),
         nabungScroll = o.optBoolean("nabungScroll", false),
-        nabungPinned = o.optString("nabungPinned", "")
+        nabungPinned = o.optString("nabungPinned", ""),
+        multiAccount = o.optBoolean("multiAccount", true),
+        splitBalance = o.optBoolean("splitBalance", true),
+        homeStyle = if (o.optString("homeStyle", "baru") == "klasik") "klasik" else "baru",
+        hideBalance = o.optBoolean("hideBalance", false),
+        notifDetect = o.optBoolean("notifDetect", false),
+        onboarded = o.optBoolean("onboarded", tx.isNotEmpty())
     )
 } catch (e: Exception) {
     Saku()
@@ -495,6 +766,13 @@ private val K_UI = stringPreferencesKey("ui")
 private val K_SHOW_NABUNG = booleanPreferencesKey("showNabungHome")
 private val K_NABUNG_SCROLL = booleanPreferencesKey("nabungScroll")
 private val K_NABUNG_PINNED = stringPreferencesKey("nabungPinned")
+private val K_ACCOUNTS = stringPreferencesKey("accounts")
+private val K_MULTI_ACCOUNT = booleanPreferencesKey("multiAccount")
+private val K_SPLIT_BALANCE = booleanPreferencesKey("splitBalance")
+private val K_HOME_STYLE = stringPreferencesKey("homeStyle")
+private val K_HIDE_BALANCE = booleanPreferencesKey("hideBalance")
+private val K_NOTIF_DETECT = booleanPreferencesKey("notifDetect")
+private val K_ONBOARDED = booleanPreferencesKey("onboarded")
 
 private fun txKey(id: String) = stringPreferencesKey("tx_" + id)
 
@@ -506,6 +784,7 @@ private fun writeAllInto(p: MutablePreferences, s: Saku) {
     p[K_IDS] = s.tx.map { it.id }.toSet()
     p[K_CATS] = encodeCats(s.cats)
     p[K_GOALS] = encodeGoals(s.goals)
+    p[K_ACCOUNTS] = encodeAccounts(s.accounts)
     p[K_DARK] = s.dark
     p[K_PALETTE] = s.paletteId
     p[K_ACCENT] = s.customAccent
@@ -517,6 +796,12 @@ private fun writeAllInto(p: MutablePreferences, s: Saku) {
     p[K_SHOW_NABUNG] = s.showNabungHome
     p[K_NABUNG_SCROLL] = s.nabungScroll
     p[K_NABUNG_PINNED] = s.nabungPinned
+    p[K_MULTI_ACCOUNT] = s.multiAccount
+    p[K_SPLIT_BALANCE] = s.splitBalance
+    p[K_HOME_STYLE] = s.homeStyle
+    p[K_HIDE_BALANCE] = s.hideBalance
+    p[K_NOTIF_DETECT] = s.notifDetect
+    p[K_ONBOARDED] = s.onboarded
 }
 
 private fun decodePrefs(p: Preferences): Saku {
@@ -535,6 +820,7 @@ private fun decodePrefs(p: Preferences): Saku {
         tx = tx,
         cats = decodeCats(p[K_CATS]),
         goals = decodeGoals(p[K_GOALS]),
+        accounts = decodeAccounts(p[K_ACCOUNTS]),
         dark = p[K_DARK] ?: true,
         paletteId = p[K_PALETTE] ?: "mono",
         customAccent = p[K_ACCENT] ?: 0xFF23418F,
@@ -545,7 +831,13 @@ private fun decodePrefs(p: Preferences): Saku {
         uiGlass = ui.safeUiGlass(),
         showNabungHome = p[K_SHOW_NABUNG] ?: true,
         nabungScroll = p[K_NABUNG_SCROLL] ?: false,
-        nabungPinned = p[K_NABUNG_PINNED] ?: ""
+        nabungPinned = p[K_NABUNG_PINNED] ?: "",
+        multiAccount = p[K_MULTI_ACCOUNT] ?: true,
+        splitBalance = p[K_SPLIT_BALANCE] ?: true,
+        homeStyle = if (p[K_HOME_STYLE] == "klasik") "klasik" else "baru",
+        hideBalance = p[K_HIDE_BALANCE] ?: false,
+        notifDetect = p[K_NOTIF_DETECT] ?: false,
+        onboarded = p[K_ONBOARDED] ?: tx.isNotEmpty()
     )
 }
 
@@ -609,12 +901,15 @@ class Store(private val ctx: Context) {
         }
     }
 
-    /** Dipakai setelah restore: paksa tulis ulang seluruh key. */
+    /** Dipakai setelah restore / hapus semua: bersihkan key lama lalu tulis ulang. */
     fun replace(s: Saku) {
         snapshot = s
         scope.launch {
             try {
-                ds.edit { p -> writeAllInto(p, s) }
+                ds.edit { p ->
+                    p.clear()
+                    writeAllInto(p, s)
+                }
             } catch (e: Exception) {
             }
         }
@@ -631,6 +926,7 @@ class Store(private val ctx: Context) {
         }
         if (prev.cats != s.cats) p[K_CATS] = encodeCats(s.cats)
         if (prev.goals != s.goals) p[K_GOALS] = encodeGoals(s.goals)
+        if (prev.accounts != s.accounts) p[K_ACCOUNTS] = encodeAccounts(s.accounts)
         if (prev.dark != s.dark) p[K_DARK] = s.dark
         if (prev.paletteId != s.paletteId) p[K_PALETTE] = s.paletteId
         if (prev.customAccent != s.customAccent) p[K_ACCENT] = s.customAccent
@@ -644,6 +940,12 @@ class Store(private val ctx: Context) {
         if (prev.showNabungHome != s.showNabungHome) p[K_SHOW_NABUNG] = s.showNabungHome
         if (prev.nabungScroll != s.nabungScroll) p[K_NABUNG_SCROLL] = s.nabungScroll
         if (prev.nabungPinned != s.nabungPinned) p[K_NABUNG_PINNED] = s.nabungPinned
+        if (prev.multiAccount != s.multiAccount) p[K_MULTI_ACCOUNT] = s.multiAccount
+        if (prev.splitBalance != s.splitBalance) p[K_SPLIT_BALANCE] = s.splitBalance
+        if (prev.homeStyle != s.homeStyle) p[K_HOME_STYLE] = s.homeStyle
+        if (prev.hideBalance != s.hideBalance) p[K_HIDE_BALANCE] = s.hideBalance
+        if (prev.notifDetect != s.notifDetect) p[K_NOTIF_DETECT] = s.notifDetect
+        if (prev.onboarded != s.onboarded) p[K_ONBOARDED] = s.onboarded
     }
 }
 
@@ -657,7 +959,7 @@ sealed interface GoalSheet {
 }
 
 /** Setoran: transaksi keluar berkategori Nabung, jadi saldo akhir ikut turun. */
-fun Saku.deposit(goal: Goal, amount: Long): Saku {
+fun Saku.deposit(goal: Goal, amount: Long, accountId: String = defaultAccountId()): Saku {
     val tx = Tx(
         id = "t" + System.nanoTime().toString(36),
         date = Fmt.iso(Date()),
@@ -666,7 +968,8 @@ fun Saku.deposit(goal: Goal, amount: Long): Saku {
         amount = amount,
         cat = CAT_NABUNG,
         note = "Setor · " + goal.name,
-        goal = goal.id
+        goal = goal.id,
+        account = accountId
     )
     val withCat = if (cats.none { it.id == CAT_NABUNG }) {
         copy(cats = cats + Cat(CAT_NABUNG, "Nabung", "wallet"))
@@ -677,7 +980,7 @@ fun Saku.deposit(goal: Goal, amount: Long): Saku {
 }
 
 /** Penarikan: transaksi masuk, saldo akhir naik lagi. */
-fun Saku.withdraw(goal: Goal, amount: Long): Saku = withTx(
+fun Saku.withdraw(goal: Goal, amount: Long, accountId: String = defaultAccountId()): Saku = withTx(
     Tx(
         id = "t" + System.nanoTime().toString(36),
         date = Fmt.iso(Date()),
@@ -686,6 +989,7 @@ fun Saku.withdraw(goal: Goal, amount: Long): Saku = withTx(
         amount = amount,
         cat = CAT_NABUNG,
         note = "Tarik · " + goal.name,
-        goal = goal.id
+        goal = goal.id,
+        account = accountId
     )
 )

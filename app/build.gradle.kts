@@ -15,9 +15,9 @@ android {
         minSdk = 26
         targetSdk = 37
         // V1.5 #8: versi dibaca PackageManager untuk ditampilkan di Setting.
-        // Satu versi = satu versionCode: 1.4 -> 5, V1.6 -> 6.
-        versionCode = 6
-        versionName = "1.6"
+        // Satu versi = satu versionCode: V1.6 -> 6, V1.6.8 -> 7.
+        versionCode = 7
+        versionName = "1.6.8"
     }
 
     buildFeatures { compose = true }
@@ -52,4 +52,6 @@ dependencies {
     // dideklarasikan eksplisit supaya tidak cuma mengandalkan dependensi transitif.
     implementation("io.github.kyant0:backdrop:2.0.1")
     implementation("io.github.kyant0:shapes:1.2.1")
+
+    testImplementation("junit:junit:4.13.2")
 }

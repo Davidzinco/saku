@@ -63,8 +63,12 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -145,27 +149,25 @@ fun Modifier.pressable(
  */
 @Composable
 fun Modifier.rowEnter(index: Int, resetKey: Any = Unit): Modifier {
+    // V1.6.8 #4: baris di luar 8 pertama langsung tampil tanpa Animatable/LaunchedEffect
+    // supaya pengguliran daftar panjang tidak membuat ratusan coroutine per detik.
+    if (index >= 8) return this
     val scale = motionScale()
-    val anim = remember { Animatable(0f) }
-    // V1.4 #1: animasi baris diulang saat bulan berubah, tapi LazyColumn tidak
-    // dibongkar-pasang (dulu AnimatedContent bikin daftar sempat kosong / ngelag).
+    if (scale <= 0f) return this
+    val anim = remember(resetKey) { Animatable(0f) }
     LaunchedEffect(resetKey) {
-        if (scale <= 0f) {
-            anim.snapTo(1f)
-        } else {
-            anim.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = Motion.d(Motion.ENTER, scale),
-                    delayMillis = Motion.d((index % 8) * 26, scale),
-                    easing = FastOutSlowInEasing
-                )
+        anim.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = Motion.d(Motion.ENTER, scale),
+                delayMillis = Motion.d(index * 22, scale),
+                easing = FastOutSlowInEasing
             )
-        }
+        )
     }
     return this.graphicsLayer {
         alpha = anim.value
-        translationY = (1f - anim.value) * 16f
+        translationY = (1f - anim.value) * 14f
     }
 }
 
@@ -233,7 +235,9 @@ enum class Ic {
     Plus, Minus, Close, ChevL, ChevR, Check, Up, Down, Trash, Pencil,
     Food, Car, Bag, Film, Heart, Money, Dot, Palette, Chart, Tag,
     // V1.4: Time Input, foto, backup, dan pin nabung
-    Clock, Camera, Image, Backup, Restore, Pin
+    Clock, Camera, Image, Backup, Restore, Pin,
+    // V1.6.8: ikon mata saldo, notifikasi, pindah saldo, kartu/bank, onboarding
+    Eye, EyeOff, Bell, Transfer, Card, Sparkle
 }
 
 fun glyphOf(name: String): Ic = when (name) {
@@ -247,6 +251,9 @@ fun glyphOf(name: String): Ic = when (name) {
     "wallet" -> Ic.Wallet
     "image" -> Ic.Image
     "pin" -> Ic.Pin
+    "card" -> Ic.Card
+    "transfer" -> Ic.Transfer
+    "bell" -> Ic.Bell
     else -> Ic.Dot
 }
 
@@ -467,6 +474,105 @@ fun Glyph(ic: Ic, tint: Color, box: Dp = 20.dp, stroke: Dp = 1.5.dp) {
                 circle(10f, 7.6f, 3.2f)
                 line(10f, 10.8f, 10f, 17f)
             }
+
+            Ic.Eye -> {
+                path {
+                    moveTo(2.4f * s, 10f * s)
+                    cubicTo(5.2f * s, 5.4f * s, 14.8f * s, 5.4f * s, 17.6f * s, 10f * s)
+                    cubicTo(14.8f * s, 14.6f * s, 5.2f * s, 14.6f * s, 2.4f * s, 10f * s)
+                    close()
+                }
+                circle(10f, 10f, 2.3f)
+            }
+
+            Ic.EyeOff -> {
+                path {
+                    moveTo(2.4f * s, 10f * s)
+                    cubicTo(5.2f * s, 5.4f * s, 14.8f * s, 5.4f * s, 17.6f * s, 10f * s)
+                    cubicTo(14.8f * s, 14.6f * s, 5.2f * s, 14.6f * s, 2.4f * s, 10f * s)
+                }
+                line(3.6f, 3.6f, 16.4f, 16.4f)
+            }
+
+            Ic.Bell -> {
+                path {
+                    moveTo(5.2f * s, 13.6f * s)
+                    lineTo(5.2f * s, 9.2f * s)
+                    cubicTo(5.2f * s, 6.1f * s, 7.3f * s, 4f * s, 10f * s, 4f * s)
+                    cubicTo(12.7f * s, 4f * s, 14.8f * s, 6.1f * s, 14.8f * s, 9.2f * s)
+                    lineTo(14.8f * s, 13.6f * s)
+                    lineTo(16.4f * s, 15.2f * s)
+                    lineTo(3.6f * s, 15.2f * s)
+                    close()
+                }
+                line(8.4f, 17.2f, 11.6f, 17.2f)
+            }
+
+            Ic.Transfer -> {
+                line(3.6f, 7.4f, 16.2f, 7.4f)
+                path { moveTo(12.8f * s, 4.4f * s); lineTo(16.2f * s, 7.4f * s); lineTo(12.8f * s, 10.4f * s) }
+                line(16.4f, 13f, 3.8f, 13f)
+                path { moveTo(7.2f * s, 10f * s); lineTo(3.8f * s, 13f * s); lineTo(7.2f * s, 16f * s) }
+            }
+
+            Ic.Card -> {
+                rect(2.4f, 5f, 15.2f, 10f, 1.8f)
+                line(2.4f, 8.6f, 17.6f, 8.6f)
+                line(5.2f, 12.2f, 9f, 12.2f)
+            }
+
+            Ic.Sparkle -> {
+                path {
+                    moveTo(10f * s, 3f * s)
+                    lineTo(11.8f * s, 8.2f * s)
+                    lineTo(17f * s, 10f * s)
+                    lineTo(11.8f * s, 11.8f * s)
+                    lineTo(10f * s, 17f * s)
+                    lineTo(8.2f * s, 11.8f * s)
+                    lineTo(3f * s, 10f * s)
+                    lineTo(8.2f * s, 8.2f * s)
+                    close()
+                }
+            }
+        }
+    }
+}
+
+/** V1.6.8 — sakelar on/off ringkas tanpa Material (target sentuh >= 44dp + Role.Switch). */
+@Composable
+fun ToggleSwitch(t: Tok, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    val thumbX by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.85f, stiffness = 500f),
+        label = "toggle"
+    )
+    Box(
+        Modifier
+            .width(48.dp)
+            .height(44.dp)
+            .semantics {
+                role = Role.Switch
+                toggleableState = ToggleableState(checked)
+            }
+            .tap { onToggle(!checked) },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .width(46.dp)
+                .height(26.dp)
+                .clip(CircleShape)
+                .background(if (checked) t.accent else t.hair)
+                .padding(3.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .graphicsLayer { translationX = thumbX * 20.dp.toPx() }
+                    .clip(CircleShape)
+                    .background(if (checked) (if (t.dark) t.bg else Color.White) else t.sheet)
+            )
         }
     }
 }
@@ -609,7 +715,7 @@ fun PrimaryButton(
         Text(
             label,
             Type.body.copy(fontWeight = FontWeight.SemiBold),
-            if (enabled) (if (t.dark) t.bg else Color.White) else t.faint,
+            if (enabled) (if (t.dark) t.bg else Color.White) else t.muted2,
             align = TextAlign.Center
         )
     }
@@ -713,7 +819,13 @@ fun ScreenHeader(t: Tok, title: String, back: Boolean, onBack: () -> Unit = {}) 
     ) {
         if (back) {
             TouchTarget {
-                Box(Modifier.fillMaxSize().tap(onBack), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .semantics { contentDescription = "Kembali" }
+                        .tap(onBack),
+                    contentAlignment = Alignment.Center
+                ) {
                     Glyph(Ic.ChevL, t.ink, 18.dp)
                 }
             }
@@ -741,10 +853,11 @@ fun SheetScaffold(
     // Aman karena SheetScaffold dirender di level aplikasi sebagai SAUDARA dari
     // Box sakuLayerBackdrop, bukan turunannya (lihat catatan crash di Glass.kt).
     val glass = LocalGlassUi.current
-    val chrome = if (glass.sheet && glass.backdrop != null) {
-        Modifier.glassPanel(t, glass.backdrop, shape)
+    val backdrop = glass.backdrop
+    val chrome = if (glass.sheet && backdrop != null) {
+        Modifier.glassPanel(t, backdrop, shape)
     } else {
-        Modifier.background(t.sheet)
+        Modifier.background(t.sheet).border(1.dp, t.hairSoft, shape)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -776,7 +889,6 @@ fun SheetScaffold(
                         .heightIn(max = maxSheet)
                         .clip(shape)
                         .then(chrome)
-                        .border(1.dp, t.hairSoft, shape)
                 ) {
                     Column(
                         Modifier
@@ -818,7 +930,13 @@ fun SheetTitle(t: Tok, title: String, onDismiss: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, Type.title, t.ink, Modifier.weight(1f), maxLines = 2)
         TouchTarget {
-            Box(Modifier.fillMaxSize().tap(onDismiss), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .semantics { contentDescription = "Tutup" }
+                    .tap(onDismiss),
+                contentAlignment = Alignment.Center
+            ) {
                 Glyph(Ic.Close, t.muted2, 18.dp)
             }
         }

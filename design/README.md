@@ -4,7 +4,8 @@ Mock HTML dan render PNG-nya. Ini artefak desain, **bukan kode produksi** — su
 
 | File | Arah | Dipakai untuk |
 |---|---|---|
-| `konsep-buku-tabungan-v4.html` → `konsep-beranda-v4.png` | **Buku Tabungan v4** | Arah aktif (V1.2): Home Kertas dengan grafik batang 12 bulan, Home Monokrom gelap dengan grafik garis, sheet catat transaksi dengan Time picker dan footer sticky |
+| `konsep-v1.6.8.html` | **V1.6.8 Modern + Liquid Glass** | Arah aktif (V1.6.8): Beranda Baru kartu saldo 3D tilt-parallax + sumber dana + ikon mata, redesign kartu visual Tabungan, dan dial radial 2 cincin (1–24) |
+| `konsep-buku-tabungan-v4.html` → `konsep-beranda-v4.png` | **Buku Tabungan v4** | Opsi Beranda Klasik (V1.2–V1.6): satu lembar kertas dengan grafik batang/garis dan tabel transaksi |
 | `konsep-buku-tabungan-v3.html` → `konsep-beranda-v3.png` | Buku Tabungan v3 | Arah yang diimplementasikan di V1.0 (satu lembar, kolom saldo berjalan) |
 | `konsep-buku-tabungan-v2.html` → `konsep-beranda-v2.png` | Buku Tabungan v2 | Putaran penyempurnaan kedua (riwayat) |
 | `konsep-buku-tabungan.html` → `konsep-beranda.png` | Buku Tabungan v1 | Kandidat pertama, sebelum audit (riwayat) |

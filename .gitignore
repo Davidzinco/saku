@@ -26,3 +26,6 @@ build.log
 shot*.png
 hp-*.png
 lint.log
+
+# AI
+memory/

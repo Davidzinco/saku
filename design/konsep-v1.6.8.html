@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Saku V1.6.8 — Mockup Antarmuka</title>
+<style>
+  :root {
+    --bg: #121A16;
+    --sheet: #1A241F;
+    --ink: #E7EDE5;
+    --muted: #A3AFA5;
+    --muted2: #8B978D;
+    --accent: #8FA5F2;
+    --accent-wash: rgba(143, 165, 242, 0.14);
+    --pos: #7FBE99;
+    --err: #E38A7A;
+    --hair: rgba(231, 237, 229, 0.12);
+    --hair-soft: rgba(231, 237, 229, 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0B0F0D;
+    color: var(--ink);
+    font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 32px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    justify-content: center;
+  }
+  .phone {
+    width: 390px;
+    min-height: 844px;
+    background: var(--bg);
+    border-radius: 36px;
+    border: 1px solid var(--hair);
+    padding: 28px 24px 104px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .caption {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted2);
+    margin-top: 10px;
+    letter-spacing: 0.04em;
+  }
+  .row { display: flex; align-items: center; }
+  .between { justify-content: space-between; }
+  .gap8 { gap: 8px; }
+  .gap10 { gap: 10px; }
+  .wordmark { font-size: 13px; font-weight: 700; letter-spacing: 0.22em; }
+  .title { font-size: 19px; font-weight: 600; }
+  .section { font-size: 12.5px; font-weight: 600; }
+  .micro { font-size: 10.5px; color: var(--muted2); }
+  .label { font-size: 11.5px; color: var(--muted); }
+  .pill {
+    background: var(--sheet);
+    border: 1px solid var(--hair-soft);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .eye {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--hair-soft);
+    display: grid; place-items: center;
+    font-size: 13px; color: var(--muted);
+  }
+  .hero-card {
+    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(143,165,242,0.32), var(--sheet) 55%, rgba(143,165,242,0.12));
+    border: 1px solid rgba(255,255,255,0.22);
+    padding: 20px;
+    transform: perspective(700px) rotateY(-2deg) rotateX(2deg);
+  }
+  .badge {
+    display: inline-block;
+    background: var(--accent-wash);
+    color: var(--accent);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .hero-num {
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 38px;
+    line-height: 1.08;
+    margin-top: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-num span { font-family: inherit; font-size: 16px; color: var(--muted2); margin-right: 6px; }
+  .mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .mini {
+    background: rgba(18,26,22,0.48);
+    border: 1px solid var(--hair-soft);
+    border-radius: 12px;
+    padding: 8px 10px;
+  }
+  .mini .v { font-size: 11.5px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--pos); }
+  .err { color: var(--err); }
+  .acc { color: var(--accent); }
+  .accounts { display: flex; gap: 10px; }
+  .acc-tile {
+    flex: 1;
+    background: var(--sheet);
+    border: 1px solid var(--hair-soft);
+    border-radius: 16px;
+    padding: 13px;
+  }
+  .acc-tile .amt { font-size: 14px; font-weight: 600; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .card {
+    background: var(--sheet);
+    border: 1px solid var(--hair-soft);
+    border-radius: 18px;
+    padding: 14px 16px;
+  }
+  .track { height: 6px; border-radius: 999px; background: var(--hair); overflow: hidden; margin-top: 8px; }
+  .track > div { height: 100%; background: var(--pos); border-radius: 999px; }
+  .goal-card {
+    background: var(--sheet);
+    border: 1px solid var(--hair-soft);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  .goal-banner {
+    height: 128px;
+    background: linear-gradient(180deg, rgba(143,165,242,0.22), rgba(13,18,15,0.88)),
+                radial-gradient(circle at 75% 25%, #3B6EF5, #1A241F);
+    padding: 14px 16px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .btn-pri {
+    background: var(--accent); color: var(--bg);
+    text-align: center; padding: 10px; border-radius: 12px; font-size: 12px; font-weight: 600;
+  }
+  .btn-sec {
+    border: 1px solid var(--hair); color: var(--ink);
+    text-align: center; padding: 10px; border-radius: 12px; font-size: 12px; font-weight: 600;
+  }
+  .dock {
+    position: absolute; left: 22px; right: 22px; bottom: 24px;
+    height: 64px; border-radius: 999px;
+    background: rgba(26,36,31,0.72);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.16);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 4px 12px;
+  }
+  .dock span { font-size: 11px; color: var(--muted2); }
+  .dock .on { color: var(--accent); font-weight: 600; }
+  .fab {
+    position: absolute; left: 50%; bottom: 51px; transform: translateX(-50%);
+    width: 54px; height: 54px; border-radius: 50%;
+    background: var(--accent); color: var(--bg);
+    display: grid; place-items: center; font-size: 24px; font-weight: 700;
+    box-shadow: 0 10px 24px rgba(143,165,242,0.35);
+  }
+  .dial {
+    width: 248px; height: 248px; border-radius: 50%;
+    border: 1px solid var(--hair);
+    margin: 12px auto; position: relative;
+    display: grid; place-items: center;
+  }
+  .dial-inner {
+    width: 150px; height: 150px; border-radius: 50%;
+    border: 1px dashed var(--hair-soft);
+    display: grid; place-items: center;
+    font-size: 11px; color: var(--muted2); text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div>
+  <div class="phone">
+    <div class="row between">
+      <div class="wordmark">SAKU</div>
+      <div class="row gap8">
+        <div class="pill">‹ Nov 2026 ›</div>
+        <div class="eye">👁</div>
+      </div>
+    </div>
+
+    <div class="hero-card">
+      <div class="row between">
+        <span class="badge">Total saldo</span>
+        <div class="eye" style="width:28px;height:28px;">👁</div>
+      </div>
+      <div class="hero-num"><span>Rp</span>16.421.404</div>
+      <div class="mini-grid">
+        <div class="mini"><div class="micro">Masuk</div><div class="v pos">+6.500.000</div></div>
+        <div class="mini"><div class="micro">Keluar</div><div class="v err">−2.180.000</div></div>
+        <div class="mini"><div class="micro">Selisih</div><div class="v pos">+4.320.000</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="row between" style="margin-bottom:8px;">
+        <span class="section">Sumber dana</span>
+        <span class="micro">2 aktif</span>
+      </div>
+      <div class="accounts">
+        <div class="acc-tile">
+          <div class="label">Tunai</div>
+          <div class="amt">Rp 4.120.000</div>
+        </div>
+        <div class="acc-tile">
+          <div class="label">E-Wallet</div>
+          <div class="amt">Rp 12.301.404</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row between"><span class="section">Spending per kategori</span><span class="micro">4 kategori</span></div>
+      <div class="track" style="display:flex;gap:2px;background:transparent;">
+        <div style="width:44%;background:#E7EDE5;"></div>
+        <div style="width:26%;background:#A3AFA5;"></div>
+        <div style="width:18%;background:#6B7770;"></div>
+        <div style="width:12%;background:#3A4740;"></div>
+      </div>
+      <div class="row between" style="margin-top:10px;">
+        <span class="micro">Makan · 960.000</span>
+        <span class="micro">Transport · 540.000</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row between"><span class="section">Dana Darurat</span><span class="micro">12.000.000 / 20.000.000</span></div>
+      <div class="track"><div style="width:60%;"></div></div>
+    </div>
+
+    <div class="dock">
+      <span class="on">Home</span><span>Transaksi</span><span style="width:44px;"></span><span>Nabung</span><span>Setting</span>
+    </div>
+    <div class="fab">+</div>
+  </div>
+  <div class="caption">Beranda Baru (Kartu 3D Tilt-Parallax + Sumber Dana + Ikon Mata)</div>
+</div>
+
+<div>
+  <div class="phone">
+    <div class="row between">
+      <div class="title">Tabungan</div>
+      <div class="eye">👁</div>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg, rgba(127,190,153,0.22), var(--sheet)); border-color:rgba(127,190,153,0.3);">
+      <div class="row between">
+        <span class="label">Total tersimpan</span>
+        <span class="badge" style="background:rgba(127,190,153,0.18);color:var(--pos);">60% tercapai</span>
+      </div>
+      <div class="hero-num" style="font-size:32px;"><span>Rp</span>12.000.000</div>
+      <div class="micro" style="margin-top:2px;">dari target Rp 20.000.000</div>
+      <div class="track"><div style="width:60%;"></div></div>
+    </div>
+
+    <div class="goal-card">
+      <div class="goal-banner">
+        <div style="font-size:17px;font-weight:600;color:#fff;">Dana Darurat</div>
+        <span class="badge" style="background:var(--pos);color:#fff;">60%</span>
+      </div>
+      <div style="padding:14px 16px;">
+        <div class="row between">
+          <span style="font-size:14px;font-weight:600;">Rp 12.000.000</span>
+          <span class="micro">Sisa 8.000.000</span>
+        </div>
+        <div class="track"><div style="width:60%;"></div></div>
+        <div class="btn-row">
+          <div class="btn-pri">Setor</div>
+          <div class="btn-sec">Tarik</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row between"><span class="section">Time Input 24j (1–24)</span><span class="badge">AM / PM di kepala</span></div>
+      <div class="dial">
+        <div class="dial-inner">Cincin luar: 1–12<br/>Cincin dalam: 13–24</div>
+      </div>
+    </div>
+
+    <div class="dock">
+      <span>Home</span><span>Transaksi</span><span style="width:44px;"></span><span class="on">Nabung</span><span>Setting</span>
+    </div>
+    <div class="fab">+</div>
+  </div>
+  <div class="caption">Redesign Tabungan + Dial Radial 2 Cincin (1–24)</div>
+</div>
+
+</body>
+</html>

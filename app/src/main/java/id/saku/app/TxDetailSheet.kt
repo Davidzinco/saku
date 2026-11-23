@@ -48,9 +48,17 @@ fun TxDetailSheet(
     var confirmDelete by remember { mutableStateOf(false) }
     var viewerAt by remember { mutableStateOf<Int?>(null) }
     val isIn = tx.type == "in"
-    val amountColor = if (isIn) t.pos else if (deleted) t.muted2 else t.error
-    val catName = saku.catOf(tx.cat)?.name ?: "Lainnya"
+    val isTransfer = tx.type == "transfer"
+    val amountColor = when {
+        deleted -> t.muted2
+        isTransfer -> t.accent
+        isIn -> t.pos
+        else -> t.error
+    }
+    val catName = if (isTransfer) "Pindah saldo" else (saku.catOf(tx.cat)?.name ?: "Lainnya")
     val goalName = if (tx.goal.isEmpty()) null else saku.goalOf(tx.goal)?.name
+    val fromAccName = saku.accountOf(tx.account)?.name ?: saku.accounts.firstOrNull()?.name ?: "Tunai"
+    val toAccName = if (tx.toAccount.isNotEmpty()) saku.accountOf(tx.toAccount)?.name else null
     val photos = tx.allPhotos
 
     Box(Modifier.fillMaxSize()) {
@@ -102,9 +110,17 @@ fun TxDetailSheet(
                 Text(notice, Type.label, t.accent, Modifier.padding(vertical = 8.dp), maxLines = 2)
             }
 
-            Text(if (isIn) "Masuk" else "Keluar", Type.label, t.muted2)
             Text(
-                (if (isIn) "+" else "\u2212") + Fmt.num(tx.amount),
+                when {
+                    isTransfer -> "Pindah saldo"
+                    isIn -> "Masuk"
+                    else -> "Keluar"
+                },
+                Type.label,
+                t.muted2
+            )
+            Text(
+                (if (isTransfer) "" else if (isIn) "+" else "\u2212") + Fmt.num(tx.amount),
                 Type.display,
                 amountColor,
                 Modifier.padding(top = 3.dp)
@@ -127,7 +143,15 @@ fun TxDetailSheet(
             Spacer(Modifier.height(16.dp))
             Hair(t.hair)
 
-            DetailRow(t, "Kategori", catName, glyph = saku.catOf(tx.cat)?.glyph)
+            DetailRow(t, "Kategori", catName, glyph = if (isTransfer) "transfer" else saku.catOf(tx.cat)?.glyph)
+            if (saku.multiAccount || isTransfer) {
+                DetailRow(
+                    t,
+                    if (isTransfer) "Alur saldo" else "Sumber dana",
+                    if (isTransfer && toAccName != null) "$fromAccName \u2192 $toAccName" else fromAccName,
+                    glyph = "wallet"
+                )
+            }
             DetailRow(t, "Catatan", tx.note.ifBlank { "—" })
             DetailRow(t, "Tanggal", Fmt.longDate(tx.date))
             // V1.5 #4: hari, jam beserta pembagian waktu, lampiran, dan asal

@@ -45,6 +45,33 @@ riwayat transaksi terasa lancar serta aplikasi tetap stabil dalam berbagai kondi
 13. Memperbarui folder desain agar mengikuti desain antarmuka versi aplikasi saat
     ini.
 
+### Status pengerjaan V1.6.8 (2026-11-23, selesai & build terverifikasi)
+
+12 poin inti V1.6.8 telah diimplementasikan (poin **#11 Saldo Beku** ditunda ke **V1.7** sesuai kesepakatan). Invarian Liquid Glass overlay (tanpa `drawBackdrop` di dalam `sakuLayerBackdrop`) dan grid 4 kolom Buku Tabungan tetap terjaga.
+
+1. **Selesai** — Sumber Dana (`Account` di `Data.kt`, `SumberDanaPage` di `Atur.kt`, `TxSheet`, `TxDetailSheet`): bawaan Tunai & E-Wallet + tambah sumber custom (Tunai/E-Wallet/Bank), opsi Tunggal vs Multi serta Gabung vs Pisah di Pengaturan, dan fitur **Pindah Saldo** antar sumber dana tanpa mengubah total kekayaan. Kompatibel dengan DataStore & Backup ZIP.
+2. **Selesai** — Perombakan Beranda (`Beranda.kt`): **Beranda Baru** dengan kartu saldo 3D tilt-parallax bernuansa glass-inspired (aman tanpa rekursi RenderNode), ringkasan sumber dana, kategori cepat, nabung, dan transaksi terbaru; **Beranda Klasik** tetap utuh dan bisa dipilih lewat Pengaturan › Beranda.
+3. **Selesai** — Deteksi Notifikasi E-Wallet (`NotifListener.kt`) + **Widget 4×2** (`SakuWidgetProvider.kt` + `widget_saku.xml`): mendeteksi notifikasi pembayaran GoPay, OVO, DANA, ShopeePay, LinkAja, BCA, Mandiri, BRI, BNI, SeaBank, Jago → menawarkan notifikasi Saku *"Catat Rp X?"* (tidak auto-simpan), dengan toggle di Pengaturan dan Onboarding.
+4. **Selesai** — Optimasi Performa: satu lintasan `MonthSnapshot` menggantikan 5× filter/sort per frame di Beranda & Transaksi, memoize `saku.tokens()`, isolasi `AnimatedHeroAmount`/`AnimatedStat` agar `LazyColumn` tidak recompose saat angka bergerak, `rowEnter` hanya untuk 8 baris pertama, penghapusan `Animatable` pada baris non-flash, dan cache `Fmt.weekdayShort()`.
+5. **Selesai** — Hapus Data (`HapusDataPage` di `Atur.kt` + `withoutMonth`/`clearedAll` di `Data.kt`): hapus transaksi per bulan tertentu atau hapus seluruh data (transaksi + target + foto) dengan konfirmasi dua ketuk.
+6. **Selesai** — Layar Sambutan & Onboarding (`Onboarding.kt`): 3 langkah saat instalasi awal, dilengkapi **halaman khusus untuk menjelaskan dan menyalakan/mematikan tiap fitur** (Beranda Baru, Liquid Glass, Multi Sumber Dana, Sembunyikan Saldo, Deteksi Notifikasi E-Wallet) + pilihan tema cepat. Bisa dibuka ulang lewat Pengaturan › Panduan Awal.
+7. **Selesai** — Perapihan Pengaturan & Tema (`Atur.kt`, `Theme.kt`): Pengaturan dikelompokkan ke Tampilan, Keuangan, Otomatis & Pengingat, serta Data & Cadangan; tema diperluas menjadi **14 palet, 8 nada latar, dan 18 warna aksen custom**.
+8. **Selesai** — Perbaikan Time Input (`Sheet.kt`): format 24 jam memakai **dial radial 2 cincin (luar 1–12, dalam 13–24)**; penanda **AM/PM** pada format 12 jam dipindah ke kepala popover di sebelah `HH:MM`.
+9. **Selesai** — Ikon Mata privasi saldo (`EyeToggleButton` di Beranda, Transaksi, Nabung + `hideBalance` tersimpan di DataStore & Widget).
+10. **Selesai** — Halaman Transaksi (`Transaksi.kt`): kartu saldo besar yang **mengecil & sticky** saat digulir, filter sumber dana, grafik tren interaktif, dan tabel 4 kolom Buku Tabungan.
+11. **Ditunda ke V1.7** — Saldo Beku (sesuai catatan & kesepakatan).
+12. **Selesai** — Redesign UI Tabungan (`Nabung.kt`): `LazyColumn` dengan kartu ringkasan total nabung, kartu target visual foto motivasi dominan + overlay gradient, progress bar, tombol cepat Setor/Tarik, serta form Target Baru lipat.
+13. **Selesai** — Folder `design/` diperbarui dengan `design/konsep-v1.6.8.html` dan `design/README.md`; `versionCode = 7`, `versionName = "1.6.8"`.
+
+**Verifikasi build (2026-11-23):**
+
+- `:app:assembleDebug` **BUILD SUCCESSFUL** pada percobaan pertama tanpa error maupun warning kode Kotlin baru.
+- `apksigner verify` → `Verifies` (v2); `aapt2 dump badging` → `id.saku.app`, `minSdk 26`, `targetSdk 37`, `versionCode='7'`, `versionName='1.6.8'`.
+- APK: `Saku-V1.6.8-LiquidGlass.apk` (salinan dari `app/build/outputs/apk/debug/app-debug.apk`, tidak di-commit karena `*.apk` di-ignore), **10.928.507 byte**, SHA256 `775a9da79890c99b4524ae7ea80b464f297989acfca7615efcda10eb883824d7`.
+14. memberikan filter transaksi apa saja yang ingin di lihat.
+15. pada opsi nabung tidak adanya fitur nabung untuk menghapus target yang kita buat cukup tersembunyi dan sangat tidak mudah di jangkau, tapi ingat segala bentuk penghapusan transaksi memerlukan konfirmasi 2 kali 
+
+
 
 V1.6 (small update)
 1. bootom menu nya belum sesuai, saran saya ambil data dari applikasi "C:\Users\Davidzinco\WorkBuddy AI\2026-11-17-12-42-19\LiquidGlassApp"

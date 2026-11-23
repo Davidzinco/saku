@@ -3,6 +3,8 @@ package id.saku.app
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,27 +48,57 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
+/** Data awal opsional dari notifikasi e-wallet atau pintasan widget (V1.6.8 #3). */
+data class TxPrefill(
+    val type: String = "out",
+    val amount: Long = 0L,
+    val note: String = "",
+    val accountId: String = ""
+)
+
 /**
- * Sheet catat/ubah transaksi: nominal berformat, Date, Time (dial radial +
- * preset), foto pada note, dan hapus dua ketuk. Urutan field mengikuti DESIGN.md.
+ * Sheet catat/ubah transaksi: nominal berformat, sumber dana / pindah saldo,
+ * Date, Time (dial radial 2 cincin 1-24 + AM/PM di kepala), foto pada note,
+ * dan hapus dua ketuk.
  */
 @Composable
 fun TxSheet(
     t: Tok,
     cats: List<Cat>,
+    accounts: List<Account>,
+    multiAccount: Boolean,
     initial: Tx?,
+    prefill: TxPrefill? = null,
     visible: Boolean,
     onDismiss: () -> Unit,
     onSave: (Tx) -> Unit,
     onDelete: (String) -> Unit
 ) {
-    var type by remember { mutableStateOf(initial?.type ?: "out") }
-    var digits by remember { mutableStateOf(initial?.amount?.toString() ?: "") }
+    val defaultAcc = accounts.firstOrNull()?.id ?: "tunai"
+    val secondAcc = accounts.getOrNull(1)?.id ?: defaultAcc
+    var type by remember { mutableStateOf(initial?.type ?: prefill?.type ?: "out") }
+    var digits by remember {
+        val initAmt = initial?.amount ?: prefill?.amount?.takeIf { it > 0L }
+        mutableStateOf(initAmt?.toString() ?: "")
+    }
     var cat by remember {
-        val initialList = catsFor(initial?.type ?: "out", cats)
+        val initType = initial?.type ?: prefill?.type ?: "out"
+        val initialList = catsFor(initType, cats)
         mutableStateOf(initialList.firstOrNull { it.id == initial?.cat }?.id ?: initialList.first().id)
     }
-    var note by remember { mutableStateOf(initial?.note ?: "") }
+    var accountId by remember {
+        val initAcc = initial?.account?.takeIf { a -> accounts.any { it.id == a } }
+            ?: prefill?.accountId?.takeIf { a -> accounts.any { it.id == a } }
+            ?: defaultAcc
+        mutableStateOf(initAcc)
+    }
+    var toAccountId by remember {
+        val initTo = initial?.toAccount?.takeIf { a -> accounts.any { it.id == a } && a != accountId }
+            ?: accounts.firstOrNull { it.id != accountId }?.id
+            ?: secondAcc
+        mutableStateOf(initTo)
+    }
+    var note by remember { mutableStateOf(initial?.note ?: prefill?.note ?: "") }
     var dateIso by remember { mutableStateOf(initial?.date ?: Fmt.iso(Date())) }
     val initialTime = remember { initial?.time ?: Fmt.nowTime() }
     var hour by remember { mutableStateOf(initialTime.substringBefore(":").toIntOrNull() ?: 12) }
@@ -83,9 +115,11 @@ fun TxSheet(
 
     val focus = LocalFocusManager.current
     val amount = digits.toLongOrNull() ?: 0L
-    val invalid = amount <= 0L
+    val isTransfer = type == "transfer"
+    val invalid = amount <= 0L || (isTransfer && accountId == toAccountId)
     val visibleCats = catsFor(type, cats)
     val editing = initial != null
+    val canMulti = multiAccount && accounts.size >= 2
 
     SheetScaffold(
         t = t,
@@ -93,7 +127,11 @@ fun TxSheet(
         visible = visible,
         footer = {
             PrimaryButton(
-                label = if (editing) "Simpan perubahan" else "Simpan transaksi",
+                label = when {
+                    editing -> "Simpan perubahan"
+                    isTransfer -> "Simpan pindah saldo"
+                    else -> "Simpan transaksi"
+                },
                 t = t,
                 enabled = !invalid,
                 onDisabledClick = { touched = true }
@@ -105,10 +143,18 @@ fun TxSheet(
                         time = pad2(hour) + ":" + pad2(minute),
                         type = type,
                         amount = amount,
-                        cat = cat,
-                        note = note.trim(),
+                        cat = if (isTransfer) "lain" else cat,
+                        note = note.trim().ifBlank {
+                            if (isTransfer) {
+                                val fromName = accounts.firstOrNull { it.id == accountId }?.name ?: "Asal"
+                                val toName = accounts.firstOrNull { it.id == toAccountId }?.name ?: "Tujuan"
+                                "Pindah $fromName \u2192 $toName"
+                            } else ""
+                        },
                         goal = initial?.goal ?: "",
-                        photos = photos
+                        photos = photos,
+                        account = accountId,
+                        toAccount = if (isTransfer) toAccountId else ""
                     )
                 )
             }
@@ -126,28 +172,38 @@ fun TxSheet(
         SheetTitle(t, if (editing) "Ubah transaksi" else "Catat transaksi", onDismiss)
         Spacer(Modifier.height(14.dp))
 
-        // Jenis
+        // Jenis (Keluar / Masuk / Pindah bila multi sumber dana aktif)
+        val typeChoices = if (canMulti) {
+            listOf("out" to "Keluar", "in" to "Masuk", "transfer" to "Pindah")
+        } else {
+            listOf("out" to "Keluar", "in" to "Masuk")
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("out" to "Keluar", "in" to "Masuk").forEach { (value, label) ->
+            typeChoices.forEach { (value, label) ->
                 val on = type == value
                 Box(
                     Modifier
                         .weight(1f)
                         .height(44.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .border(1.dp, if (on) t.ink else t.hair, RoundedCornerShape(10.dp))
+                        .background(if (on) t.accentWash else Color.Transparent)
+                        .border(1.dp, if (on) t.accent else t.hair, RoundedCornerShape(10.dp))
                         .tap {
                             focus.clearFocus()
                             type = value
-                            val list = catsFor(value, cats)
-                            if (list.none { it.id == cat }) cat = list.first().id
+                            if (value != "transfer") {
+                                val list = catsFor(value, cats)
+                                if (list.none { it.id == cat }) cat = list.first().id
+                            } else if (toAccountId == accountId) {
+                                toAccountId = accounts.firstOrNull { it.id != accountId }?.id ?: accountId
+                            }
                         },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         label,
                         Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
-                        if (on) t.ink else t.muted
+                        if (on) t.accent else t.muted
                     )
                 }
             }
@@ -157,7 +213,7 @@ fun TxSheet(
         // Nominal
         Text("Nominal", Type.label, t.muted2)
         Spacer(Modifier.height(6.dp))
-        FieldShell(t, error = touched && invalid, height = 68.dp) {
+        FieldShell(t, error = touched && amount <= 0L, height = 68.dp) {
             Text("Rp", Type.currency, t.muted2)
             Spacer(Modifier.width(8.dp))
             AmountField(
@@ -171,22 +227,47 @@ fun TxSheet(
                 }
             )
         }
-        if (touched && invalid) {
+        if (touched && amount <= 0L) {
             Text("Nominal harus lebih dari nol.", Type.label, t.error, Modifier.padding(top = 4.dp))
         }
         Spacer(Modifier.height(16.dp))
 
-        // Kategori
-        Text("Category", Type.label, t.muted2)
-        Spacer(Modifier.height(8.dp))
-        CatChips(t, visibleCats, cat) {
-            focus.clearFocus()
-            cat = it
+        // Sumber dana (V1.6.8 #1)
+        if (canMulti) {
+            Text(if (isTransfer) "Dari sumber dana" else "Sumber dana", Type.label, t.muted2)
+            Spacer(Modifier.height(8.dp))
+            AccountChips(t, accounts, accountId) { picked ->
+                focus.clearFocus()
+                accountId = picked
+                if (isTransfer && toAccountId == picked) {
+                    toAccountId = accounts.firstOrNull { it.id != picked }?.id ?: picked
+                }
+            }
+            if (isTransfer) {
+                Spacer(Modifier.height(12.dp))
+                Text("Ke sumber dana", Type.label, t.muted2)
+                Spacer(Modifier.height(8.dp))
+                AccountChips(t, accounts.filter { it.id != accountId }, toAccountId) { picked ->
+                    focus.clearFocus()
+                    toAccountId = picked
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
-        Spacer(Modifier.height(16.dp))
+
+        // Kategori (tidak perlu untuk pindah saldo antar sumber dana)
+        if (!isTransfer) {
+            Text("Kategori", Type.label, t.muted2)
+            Spacer(Modifier.height(8.dp))
+            CatChips(t, visibleCats, cat) {
+                focus.clearFocus()
+                cat = it
+            }
+            Spacer(Modifier.height(16.dp))
+        }
 
         // Catatan
-        Text("Note", Type.label, t.muted2)
+        Text("Catatan", Type.label, t.muted2)
         Spacer(Modifier.height(6.dp))
         FieldShell(t) {
             PlainField(
@@ -210,7 +291,7 @@ fun TxSheet(
         Spacer(Modifier.height(16.dp))
 
         // Tanggal
-        Text("Date", Type.label, t.muted2)
+        Text("Tanggal", Type.label, t.muted2)
         Spacer(Modifier.height(6.dp))
         FieldShell(t) {
             Box(
@@ -287,6 +368,43 @@ private fun catsFor(type: String, cats: List<Cat>): List<Cat> = when (type) {
 }
 
 @Composable
+private fun AccountChips(
+    t: Tok,
+    accounts: List<Account>,
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        accounts.forEach { acc ->
+            val on = acc.id == selected
+            Row(
+                Modifier
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (on) t.accentWash else Color.Transparent)
+                    .border(1.dp, if (on) t.accent else t.hair, RoundedCornerShape(10.dp))
+                    .tap { onSelect(acc.id) }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Glyph(glyphOf(acc.glyph), if (on) t.accent else t.muted, 15.dp)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    acc.name,
+                    Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
+                    if (on) t.accent else t.muted
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CatChips(t: Tok, cats: List<Cat>, selected: String, onSelect: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         cats.chunked(3).forEach { row ->
@@ -296,19 +414,20 @@ private fun CatChips(t: Tok, cats: List<Cat>, selected: String, onSelect: (Strin
                     Row(
                         Modifier
                             .weight(1f)
-                            .height(38.dp)
+                            .height(44.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, if (on) t.ink else t.hair, RoundedCornerShape(10.dp))
+                            .background(if (on) t.accentWash else Color.Transparent)
+                            .border(1.dp, if (on) t.accent else t.hair, RoundedCornerShape(10.dp))
                             .tap { onSelect(cat.id) }
                             .padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Glyph(glyphOf(cat.glyph), if (on) t.ink else t.muted, 15.dp)
+                        Glyph(glyphOf(cat.glyph), if (on) t.accent else t.muted, 15.dp)
                         Spacer(Modifier.width(6.dp))
                         Text(
                             cat.name,
                             Type.label.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
-                            if (on) t.ink else t.muted,
+                            if (on) t.accent else t.muted,
                             Modifier.weight(1f)
                         )
                     }
@@ -477,17 +596,17 @@ private fun TimeInput(
         pad2(hour) + ":" + pad2(minute)
     }
 
-    Text("Time", Type.label, t.muted2)
+    Text("Waktu", Type.label, t.muted2)
     Spacer(Modifier.height(6.dp))
     Row(
         Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .border(
                 1.dp,
                 if (expanded) t.accent.copy(alpha = 0.45f) else t.hair,
-                RoundedCornerShape(12.dp)
+                RoundedCornerShape(10.dp)
             )
             .background(t.bg)
             .padding(horizontal = 14.dp),
@@ -543,68 +662,136 @@ private fun TimeInput(
                 if (step == 0) onTime((hour + 23) % 24, minute)
                 else onTime(hour, (minute + 59) % 60)
             }
-            Spacer(Modifier.width(6.dp))
-            TimeSegment(t, pad2(if (use12) h12 else hour), step == 0) { step = 0 }
-            Text(":", Type.title.copy(fontSize = 22.sp), t.muted2)
+            Spacer(Modifier.width(4.dp))
+            TimeSegment(
+                t,
+                if (use12) pad2(h12) else if (hour == 0) "24" else pad2(hour),
+                step == 0
+            ) { step = 0 }
+            Text(":", Type.title.copy(fontSize = 20.sp), t.muted2)
             TimeSegment(t, pad2(minute), step == 1) { step = 1 }
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(4.dp))
             FineButton(t, Ic.Plus) {
                 if (step == 0) onTime((hour + 1) % 24, minute)
                 else onTime(hour, (minute + 1) % 60)
             }
             Spacer(Modifier.weight(1f))
-            Text(
-                "Sekarang",
-                Type.micro.copy(fontWeight = FontWeight.SemiBold),
-                t.accent,
-                Modifier.tap {
-                    onClear()
-                    expanded = false
-                }
-            )
-        }
-
-        Spacer(Modifier.height(6.dp))
-        Text(if (step == 0) "Jam" else "Menit", Type.micro, t.muted2)
-        Spacer(Modifier.height(2.dp))
-
-        val labels: List<String>
-        val selected: Int
-        if (step == 0) {
-            labels = if (use12) {
-                (0..11).map { if (it == 0) "12" else it.toString() }
-            } else {
-                (0..11).map { pad2(it * 2) }
+            if (!use12) {
+                Text(
+                    "Sekarang",
+                    Type.micro.copy(fontWeight = FontWeight.SemiBold),
+                    t.accent,
+                    Modifier.padding(vertical = 8.dp, horizontal = 4.dp).tap {
+                        onClear()
+                        expanded = false
+                    }
+                )
             }
-            selected = if (use12) h12 % 12 else (hour / 2).coerceIn(0, 11)
-        } else {
-            labels = (0..11).map { pad2(it * 5) }
-            selected = (minute / 5).coerceIn(0, 11)
         }
 
-        val centerLabel = if (use12 && step == 0) (if (isAm) "AM" else "PM") else null
-        TimeDial(
-            t = t,
-            labels = labels,
-            selected = selected,
-            centerLabel = centerLabel,
-            onCenterClick = if (centerLabel != null) {
-                { onTime((hour + 12) % 24, minute) }
-            } else null
-        ) { i ->
-            if (step == 0) {
-                val h = if (use12) {
-                    val base = if (i == 0) 12 else i
-                    val half = if (base == 12) 0 else base
-                    if (isAm) half else half + 12
+        // V1.6.8 M3: pisahkan baris AM/PM + Sekarang agar tidak terpotong di lebar 360dp.
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (step == 0) (if (use12) "Jam (1\u201312)" else "Jam (1\u201324)") else "Menit",
+                Type.micro,
+                t.muted2
+            )
+            Spacer(Modifier.weight(1f))
+            if (use12) {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, t.hair, RoundedCornerShape(10.dp))
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    listOf(true to "AM", false to "PM").forEach { (amFlag, txt) ->
+                        val active = isAm == amFlag
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) t.accent else Color.Transparent)
+                                .tap {
+                                    if (isAm != amFlag) onTime((hour + 12) % 24, minute)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                txt,
+                                Type.micro.copy(fontWeight = FontWeight.SemiBold),
+                                if (active) (if (t.dark) t.bg else Color.White) else t.muted2
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "Sekarang",
+                    Type.micro.copy(fontWeight = FontWeight.SemiBold),
+                    t.accent,
+                    Modifier.padding(vertical = 8.dp, horizontal = 4.dp).tap {
+                        onClear()
+                        expanded = false
+                    }
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+
+        if (step == 0 && !use12) {
+            // V1.6.8 #8: format 24 jam menampilkan angka 1-24 lengkap (2 cincin).
+            // Cincin luar: 12, 1..11; Cincin dalam: 24 (00:xx), 13..23.
+            val outerLabels = (0..11).map { if (it == 0) "12" else it.toString() }
+            val innerLabels = (0..11).map { if (it == 0) "24" else (it + 12).toString() }
+            val isInner = hour == 0 || hour >= 13
+            val selIdx = if (isInner) {
+                if (hour == 0) 0 else hour - 12
+            } else {
+                if (hour == 12) 0 else hour
+            }
+            TimeDial24(
+                t = t,
+                outerLabels = outerLabels,
+                innerLabels = innerLabels,
+                selectedIndex = selIdx,
+                selectedInner = isInner
+            ) { idx, inner ->
+                val h = if (inner) {
+                    if (idx == 0) 0 else idx + 12
                 } else {
-                    i * 2
+                    if (idx == 0) 12 else idx
                 }
                 onTime(h.coerceIn(0, 23), minute)
                 step = 1
+            }
+        } else {
+            val labels: List<String>
+            val selected: Int
+            if (step == 0) {
+                labels = (0..11).map { if (it == 0) "12" else it.toString() }
+                selected = h12 % 12
             } else {
-                onTime(hour, i * 5)
-                expanded = false
+                labels = (0..11).map { pad2(it * 5) }
+                selected = (minute / 5).coerceIn(0, 11)
+            }
+
+            TimeDial(
+                t = t,
+                labels = labels,
+                selected = selected
+            ) { i ->
+                if (step == 0) {
+                    val base = if (i == 0) 12 else i
+                    val half = if (base == 12) 0 else base
+                    val h = if (isAm) half else half + 12
+                    onTime(h.coerceIn(0, 23), minute)
+                    step = 1
+                } else {
+                    onTime(hour, i * 5)
+                    expanded = false
+                }
             }
         }
 
@@ -665,7 +852,7 @@ private fun TimePreset(
 ) {
     Box(
         modifier
-            .height(38.dp)
+            .height(44.dp)
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, t.hairSoft, RoundedCornerShape(10.dp))
             .tap(onClick),
@@ -685,15 +872,13 @@ private fun TimeDial(
     t: Tok,
     labels: List<String>,
     selected: Int,
-    centerLabel: String? = null,
-    onCenterClick: (() -> Unit)? = null,
     onPick: (Int) -> Unit
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val dial = minOf(maxWidth, 228.dp)
+        val dial = minOf(maxWidth, 236.dp)
         val density = LocalDensity.current
         val dialPx = with(density) { dial.toPx() }
-        val cell = dial * (44f / 228f)
+        val cell = dial * (42f / 236f)
         val cellPx = with(density) { cell.toPx() }
         val rPx = dialPx / 2f - cellPx / 2f - with(density) { 6.dp.toPx() }
         val c = dialPx / 2f
@@ -713,9 +898,7 @@ private fun TimeDial(
                     end = Offset(c + rPx * cos(selAngle), c + rPx * sin(selAngle)),
                     strokeWidth = 2.dp.toPx()
                 )
-                if (centerLabel == null) {
-                    drawCircle(t.accent, radius = 3.dp.toPx(), center = Offset(c, c))
-                }
+                drawCircle(t.accent, radius = 3.dp.toPx(), center = Offset(c, c))
             }
 
             labels.forEachIndexed { i, label ->
@@ -747,22 +930,119 @@ private fun TimeDial(
                     )
                 }
             }
+        }
+    }
+}
 
-            if (centerLabel != null && onCenterClick != null) {
+/**
+ * V1.6.8 #8 — Dial radial 2 cincin untuk format 24 jam penuh (1..24).
+ * Cincin luar = 1..12, cincin dalam = 13..24. Semua 24 angka bisa langsung
+ * dipilih satu ketuk tanpa kelipatan dua.
+ */
+@Composable
+private fun TimeDial24(
+    t: Tok,
+    outerLabels: List<String>,
+    innerLabels: List<String>,
+    selectedIndex: Int,
+    selectedInner: Boolean,
+    onPick: (index: Int, isInner: Boolean) -> Unit
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val dial = minOf(maxWidth, 256.dp)
+        val density = LocalDensity.current
+        val dialPx = with(density) { dial.toPx() }
+        val outerCell = dial * (38f / 256f)
+        val innerCell = dial * (30f / 256f)
+        val outerCellPx = with(density) { outerCell.toPx() }
+        val innerCellPx = with(density) { innerCell.toPx() }
+        val rOuter = dialPx / 2f - outerCellPx / 2f - with(density) { 4.dp.toPx() }
+        val rInner = rOuter - outerCellPx * 0.92f
+        val c = dialPx / 2f
+        val selAngle = (selectedIndex * 30f - 90f) * PI.toFloat() / 180f
+        val selRadius = if (selectedInner) rInner else rOuter
+
+        Box(Modifier.size(dial).align(Alignment.Center)) {
+            Canvas(Modifier.size(dial)) {
+                drawCircle(
+                    color = t.hairSoft,
+                    radius = dialPx / 2f - 1.dp.toPx(),
+                    center = Offset(c, c),
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                drawCircle(
+                    color = t.hairSoft.copy(alpha = 0.6f),
+                    radius = rInner + innerCellPx * 0.56f,
+                    center = Offset(c, c),
+                    style = Stroke(width = 0.8.dp.toPx())
+                )
+                drawLine(
+                    color = t.accent.copy(alpha = 0.45f),
+                    start = Offset(c, c),
+                    end = Offset(c + selRadius * cos(selAngle), c + selRadius * sin(selAngle)),
+                    strokeWidth = 2.dp.toPx()
+                )
+                drawCircle(t.accent, radius = 3.dp.toPx(), center = Offset(c, c))
+            }
+
+            // Cincin luar: 12, 1..11
+            outerLabels.forEachIndexed { i, label ->
+                val a = (i * 30f - 90f) * PI.toFloat() / 180f
+                val x = c + rOuter * cos(a)
+                val y = c + rOuter * sin(a)
+                val on = !selectedInner && i == selectedIndex
                 Box(
                     Modifier
-                        .align(Alignment.Center)
-                        .width(54.dp)
-                        .height(30.dp)
-                        .clip(RoundedCornerShape(15.dp))
-                        .background(t.accentWash)
-                        .tap(onCenterClick),
+                        .offset {
+                            IntOffset(
+                                (x - outerCellPx / 2f).roundToInt(),
+                                (y - outerCellPx / 2f).roundToInt()
+                            )
+                        }
+                        .size(outerCell)
+                        .clip(CircleShape)
+                        .background(if (on) t.accent else Color.Transparent)
+                        .tap { onPick(i, false) },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        centerLabel,
-                        Type.micro.copy(fontWeight = FontWeight.SemiBold),
-                        t.accent
+                        label,
+                        Type.body.copy(
+                            fontSize = 13.5.sp,
+                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
+                        ),
+                        if (on) (if (t.dark) t.bg else Color.White) else t.ink
+                    )
+                }
+            }
+
+            // Cincin dalam: 24, 13..23
+            innerLabels.forEachIndexed { i, label ->
+                val a = (i * 30f - 90f) * PI.toFloat() / 180f
+                val x = c + rInner * cos(a)
+                val y = c + rInner * sin(a)
+                val on = selectedInner && i == selectedIndex
+                Box(
+                    Modifier
+                        .offset {
+                            IntOffset(
+                                (x - innerCellPx / 2f).roundToInt(),
+                                (y - innerCellPx / 2f).roundToInt()
+                            )
+                        }
+                        .size(innerCell)
+                        .clip(CircleShape)
+                        .background(if (on) t.accent else Color.Transparent)
+                        .tap { onPick(i, true) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        Type.micro.copy(
+                            fontSize = 11.sp,
+                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
+                        ),
+                        if (on) (if (t.dark) t.bg else Color.White) else t.muted2
                     )
                 }
             }

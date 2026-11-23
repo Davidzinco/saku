@@ -71,15 +71,20 @@ enum class Tab(val label: String, val icon: Ic) {
 }
 
 @Composable
-fun SakuApp() {
+fun SakuApp(
+    launchRequest: LaunchTxRequest? = null,
+    onConsumeLaunch: () -> Unit = {}
+) {
     val ctx = LocalContext.current
     val store = remember { Store(ctx) }
     var saku by remember { mutableStateOf(store.load()) }
+    var showOnboarding by remember { mutableStateOf(!saku.onboarded) }
     var tab by remember { mutableStateOf(Tab.Home) }
     var cursor by remember { mutableStateOf(Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }) }
     var sheetOpen by remember { mutableStateOf(false) }
     var sheetVisible by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Tx?>(null) }
+    var sheetPrefill by remember { mutableStateOf<TxPrefill?>(null) }
     var goalSheet by remember { mutableStateOf<GoalSheet?>(null) }
     var goalVisible by remember { mutableStateOf(false) }
     var detailTx by remember { mutableStateOf<Tx?>(null) }
@@ -93,13 +98,29 @@ fun SakuApp() {
     var chartScrubbing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    val t = saku.tokens()
+    // V1.6.8 #4: memoize token tema agar tidak dihitung ulang tiap recomposition.
+    val t = remember(saku.paletteId, saku.dark, saku.customAccent, saku.customTone) { saku.tokens() }
     // Seluruh layar direkam ke satu layer; dock/FAB kaca memantulkan layer ini.
     val backdrop = rememberSakuBackdrop(t.bg)
     val pager = rememberPagerState(pageCount = { Tab.entries.size })
     var pageJob by remember { mutableStateOf<Job?>(null) }
     val view = LocalView.current
     val activity = remember(ctx) { ctx.findActivity() }
+
+    LaunchedEffect(Unit) {
+        NotifHelper.syncEnabled(ctx, saku.notifDetect)
+    }
+
+    LaunchedEffect(launchRequest?.id) {
+        if (launchRequest != null) {
+            showOnboarding = false
+            editing = null
+            sheetPrefill = launchRequest.prefill
+            sheetOpen = true
+            sheetVisible = true
+            onConsumeLaunch()
+        }
+    }
 
     /**
      * V1.3 #3: satu jalur untuk berpindah tab. Klik cepat berulang membatalkan animasi
@@ -143,10 +164,20 @@ fun SakuApp() {
     fun update(next: Saku) {
         saku = next
         store.save(next)
+        NotifHelper.syncEnabled(ctx, next.notifDetect)
+        SakuWidgetProvider.requestUpdate(ctx, next)
+    }
+
+    fun replaceAll(next: Saku) {
+        saku = next
+        store.replace(next)
+        NotifHelper.syncEnabled(ctx, next.notifDetect)
+        SakuWidgetProvider.requestUpdate(ctx, next)
     }
 
     fun openEditor(tx: Tx?) {
         editing = tx
+        sheetPrefill = null
         sheetOpen = true
         sheetVisible = true
     }
@@ -156,6 +187,7 @@ fun SakuApp() {
         scope.launch {
             delay(200)
             sheetOpen = false
+            sheetPrefill = null
         }
     }
 
@@ -183,6 +215,20 @@ fun SakuApp() {
             delay(200)
             detailTx = null
         }
+    }
+
+    // V1.6.8 #6: layar sambutan & pengaturan fitur awal saat pertama kali dibuka.
+    if (showOnboarding) {
+        OnboardingFlow(
+            saku = saku,
+            t = t,
+            onChange = { update(it) },
+            onFinish = { finished ->
+                update(finished)
+                showOnboarding = false
+            }
+        )
+        return
     }
 
     // back: prioritas paling rendah (Atur punya handler sendiri, sheet lebih tinggi)
@@ -223,6 +269,8 @@ fun SakuApp() {
                             onCatat = { openEditor(null) },
                             onOpen = { openDetail(it) },
                             onNabung = { selectTab(Tab.Nabung) },
+                            onTransaksi = { selectTab(Tab.Transaksi) },
+                            onToggleHide = { update(saku.copy(hideBalance = !saku.hideBalance)) },
                             onScrub = { chartScrubbing = it }
                         )
 
@@ -233,7 +281,9 @@ fun SakuApp() {
                             flashId = flashId,
                             onCursor = { cursor = it },
                             onCatat = { openEditor(null) },
-                            onOpen = { openDetail(it) }
+                            onOpen = { openDetail(it) },
+                            onToggleHide = { update(saku.copy(hideBalance = !saku.hideBalance)) },
+                            onScrub = { chartScrubbing = it }
                         )
 
                         Tab.Nabung -> Nabung(
@@ -243,10 +293,17 @@ fun SakuApp() {
                             onSheet = {
                                 goalSheet = it
                                 goalVisible = true
-                            }
+                            },
+                            onToggleHide = { update(saku.copy(hideBalance = !saku.hideBalance)) }
                         )
 
-                        Tab.Setting -> Atur(saku, t, onChange = { update(it) })
+                        Tab.Setting -> Atur(
+                            saku = saku,
+                            t = t,
+                            onChange = { update(it) },
+                            onReplace = { replaceAll(it) },
+                            onOpenOnboarding = { showOnboarding = true }
+                        )
                     }
                 }
             }
@@ -298,7 +355,10 @@ fun SakuApp() {
             TxSheet(
                 t = t,
                 cats = saku.cats,
+                accounts = saku.accounts,
+                multiAccount = saku.multiAccount,
                 initial = editing,
+                prefill = sheetPrefill,
                 visible = sheetVisible,
                 onDismiss = { closeTxSheet() },
                 onSave = { tx ->

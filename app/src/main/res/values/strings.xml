@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_label">Saku Ringkasan</string>
+    <string name="widget_description">Ringkasan saldo, arus bulan ini, transaksi terbaru, dan catat cepat.</string>
+    <string name="widget_brand">SAKU</string>
+    <string name="widget_month_default">Bulan ini</string>
+    <string name="widget_balance_default">Rp 0</string>
+    <string name="widget_diff_default">Selisih 0</string>
+    <string name="widget_income_default">Masuk 0</string>
+    <string name="widget_outcome_default">Keluar 0</string>
+    <string name="widget_tx_empty">Belum ada transaksi bulan ini</string>
+    <string name="widget_btn_out">&#x2212; Keluar</string>
+    <string name="widget_btn_in">+ Masuk</string>
+    <string name="widget_cd_eye_show">Tampilkan saldo</string>
+    <string name="widget_cd_eye_hide">Sembunyikan saldo</string>
+    <string name="widget_cd_out">Catat pengeluaran</string>
+    <string name="widget_cd_in">Catat pemasukan</string>
+</resources>
