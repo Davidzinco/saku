@@ -1,11 +1,96 @@
 V1.x (upcoming)
 integrasi scan dan ai serta sync dengan aplikasi lain. persiapan penambahan menu backup to google drvie
 
-V1.6
+s
+V1.6.3
+1. beri saldo nya menjadi 2 bagian atau bisa di tambah manual di seting yaitu saldo cash atau e-wallet 
+2. coba tampilan pada home di rubah karena terlalu terlihat seperti terlalu minimalis dan mungkin tuntuk tampilan home sekarang beberapa bisa di pindah ke transaksi daripada di home. singkatnya kita coba rombak tampilan home karena terlalu minimalis tapi berikan opsi nya pada seting untuk menggunakan tampilan sekarang atau yang baru.
+3. berikan cara agar orang tidak lupa mencatat setiap pengeluaran. saya ada beberapa saran seperti notifikasi jika terdeteksi notif pembayaran dari aplikasi e-wallet dan itu bisa di nyalakan atau di matikan agar pengguna tidak merasa tidak nyaman dan ada saran lagi seperti tambah widget dengan sangat simple dan informatif serta mudah dalam mengisi data
+4. Optimasi aplikasi karena saya merasa aplikasi sudah mulai berat dari terlihatnya patah patah saat berganti menu atau sekedar scroll history transaksi
+5. berikan opsi hapus data total atau di bulan tertentu saja.
+6. 
+
+V1.6 (small update)
 1. bootom menu nya belum sesuai, saran saya ambil data dari applikasi "C:\Users\Davidzinco\WorkBuddy AI\2026-11-17-12-42-19\LiquidGlassApp"
 2. redesain jam nya menjadi lebih minimalis simple dan enak di tangan, gunakan semua teori yang ada untuk membuat menu jam yang lebih nyaman
-3. 
 
+> **Kebijakan distribusi APK (2026-11-23):** file `*.apk` **tidak lagi disimpan
+> di repository**. Semua build yang sebelumnya ter-commit
+> (`saku-1.3/1.4/1.5-debug.apk`) dikeluarkan dari tracking dan dipindahkan ke
+> asset **GitHub Releases** — `v1.3`, `v1.4`, `v1.5`, `v1.6`. `.gitignore`
+> kini mengabaikan semua `*.apk` tanpa pengecualian. Salinan lokal tetap ada di
+> root repo / root workspace hanya untuk keperluan build & upload.
+
+### Status pengerjaan V1.6 (2026-11-21, selesai)
+
+Dua area yang sama dengan V1.5 #1/#2 dikerjakan ulang karena hasil sebelumnya
+**belum sesuai**. Kali ini dock mengambil **data langsung dari proyek acuan**,
+dan Time Input didesain ulang dari nol memakai prinsip ergonomi, bukan sekadar
+menata ulang chip. Aturan kaca overlay V1.4, grid 4 kolom
+Tgl/Keterangan/Jumlah/Saldo, serta kontrak geser/tahan V1.3 tidak disentuh.
+
+1. **Selesai** — dock mengikuti `LiquidGlassApp/LiquidBottomTabs.kt`:
+   - Geometri: kapsul **64dp** (sebelumnya 66dp), inset 4dp, baris isi 56dp,
+     ikon **22dp**, label **11sp**, jarak ikon–label 2dp.
+   - Pill indikator naik dari kapsul kecil 44dp / `slot−16dp` menjadi **56dp
+     selebar slot** (`slot−8dp`, inset 4dp), sehingga benar-benar
+     "menggelinding" mengikuti tab aktif seperti komponen acuan.
+   - Pembesaran bukan lagi milik satu tab (V1.5: 1.14× pada tab aktif saja),
+     melainkan **satu `pressProgress` bersama** (`spring 1.0 / 300`) yang
+     dipakai kontainer `1 + 16dp/lebar`, **semua** isi tab `1.0 → 1.2`
+     (tab aktif tambah 1.06 agar permintaan V1.5 #1 tetap terasa), dan pill
+     sampai faktor `64/56`. Pill juga menerima squash/stretch dari kecepatan
+     geser (EMA, dijepit ±0.18) seperti `layerBlock` di acuan.
+   - Skala X pill dijepit ke rasio `slot/(slot−8dp)` supaya tidak menimpa tab
+     tetangga pada layar lebar. Jumlah state animasi turun **5 → 1**; semua
+     state tetap dibaca di lambda `graphicsLayer`, tanpa recomposition per frame.
+   - Sistem geser/tahan tidak diubah: halaman tetap baru dibuka **setelah jari
+     dilepas** (V1.3 #2), wash tetap snap ke slot terdekat.
+2. **Selesai** — Time Input didesain ulang total; grid 36 chip V1.5 dihapus:
+   - Field 52dp: ikon jam, `HH:mm` 22sp, chevron, chip `24j/12j` terpisah
+     (tidak ada clickable bersarang). "Sekarang" ada di kepala popover.
+   - **Dial radial 12 posisi, dua langkah (jam → menit)**: jam memakai model
+     jam analog (`12,1,…11` pada 12j / `00,02,…22` pada 24j), menit
+     `00,05,…55`; lingkaran + jarum digambar satu `Canvas`, 12 sel memakai
+     `tap` biasa. Ketuk jam otomatis lanjut ke menit, ketuk menit menutup
+     popover — **dua ketuk** untuk waktu penuh. Badge AM/PM di tengah dial
+     saat format 12j.
+   - **Teori yang diterapkan:** Hick (12 pilihan per langkah, bukan 36),
+     Fitts (target radial ~44dp, jarak antar pusat `2·r·sin15° ≥ lebar sel`,
+     semuanya dekat ibu jari), recognition-over-recall (model jam analog),
+     progressive disclosure, dan koreksi `−/+ 1` pada segmen aktif supaya
+     jam ganjil / menit tepat tetap bisa dipilih. Empat preset
+     pagi/siang/sore/malam menjadi jalur satu ketuk.
+   - Tetap tanpa keyboard/IME, tanpa `LazyColumn`/scroll bersarang, tanpa
+     auto-scroll; tinggi popover konstan saat segmen berganti.
+3. **Kosong** pada daftar asli — tidak ada pekerjaan tambahan yang diminta.
+   Versi aplikasi tetap mengikuti: `versionCode = 6`, `versionName = "1.6"`.
+
+**Verifikasi build (2026-11-21):**
+
+- `:app:compileDebugKotlin`, `:app:assembleDebug`, dan `:app:lintDebug`
+  (**termasuk satu kali `--rerun-tasks`**) **BUILD SUCCESSFUL**; **0 error**,
+  13 warning + 11 hint, semuanya sudah ada sejak V1.4 (tidak ada warning baru
+  dari `App.kt` maupun `Sheet.kt`). Dua state baru sengaja memakai
+  `mutableFloatStateOf` / `mutableIntStateOf` supaya tidak ada autoboxing di
+  jalur geser dock.
+- `apksigner verify` → `Verifies` (v2); `aapt dump badging` → minSdk 26,
+  targetSdk 37, `versionCode='6'`, `versionName='1.6'`. `classes3.dex`
+  membesar 1.149.352 → 1.169.828 byte, jadi kode baru benar-benar terpaket.
+- APK `saku-1.6-debug.apk` (11.189.447 byte), salinan di root workspace
+  `Saku-V1.6-LiquidGlass.apk`, SHA256
+  `d1b55a69028c45191d083ab179bffe51164ff116cc40eeeaf0d9052f6f2f288e`.
+  Sejak 2026-11-23 berkas ini **hanya diunggah sebagai asset Release `v1.6`**,
+  bukan disimpan di repo (lihat kebijakan distribusi di atas).
+- **Uji di perangkat belum dilakukan** (`adb devices` kosong). Karena kedua
+  area ini soal rasa/ergonomi, smoke test sangat disarankan: tahan & geser
+  dock (halaman tidak boleh berpindah sebelum jari lepas, pill tidak menimpa
+  tetangga), buka Time Input, pilih jam lalu menit, coba `±1`, AM/PM, preset,
+  dan format 12j/24j.
+- Perubahan V1.6 **sudah di-commit dan di-push** ke `origin/master` pada
+  2026-11-23 bersamaan dengan pengeluaran semua APK dari repository. Tag dan
+  Release **`v1.6`** dibuat dengan `Saku-V1.6-LiquidGlass.apk` sebagai asset
+  unduhan (Release "Latest"). Repo tinggal menyimpan source + dokumen.
 
 V1.5 (UI enhancement and polish)
 1. Buat bottom menu yang terselect membesar bukan hanya menunya saja sama kan dengan project "C:\Users\Davidzinco\WorkBuddy AI\2026-11-17-12-42-19\LiquidGlassApp"
@@ -18,6 +103,11 @@ V1.5 (UI enhancement and polish)
 8. mulai update informasi versi aplikasi karena setiap saya cek selalu menunjukna  V1.0
 
 ### Status pengerjaan V1.5 (2026-11-19, selesai)
+
+> **Catatan 2026-11-21:** poin **1** dan **2** di bawah berstatus *selesai
+> secara build*, tetapi **belum memenuhi ekspektasi** — keduanya sudah
+> dikerjakan ulang di **V1.6** (lihat status V1.6 di atas). Jangan jadikan
+> blok ini sebagai acuan tampilan dock / Time Input saat ini.
 
 Implementasi kedua setelah V1.5 sebelumnya direvert. Kali ini perubahan
 **disesuaikan dengan grammar aplikasi** dan dijaga agar tidak menurunkan performa:
@@ -115,9 +205,13 @@ sudah menggulir, dan aturan kaca overlay dari patch crash V1.4 tidak dilanggar.
   disarankan smoke test: buka Setting › Theme (semua area Kaca), buat target
   nabung + gambar, buka detail/riwayat, simpan transaksi dengan Time Input baru,
   lalu ekspor/impor backup. Aturan kaca overlay tidak disentuh oleh perubahan ini.
-- Perubahan sudah **di-commit** sebagai `ced6e85` dan **di-push** ke
-  `origin/master` (`github.com/Davidzinco/saku`) pada 2026-11-21; remote kini di
-  `ced6e85` (sebelumnya `a0113ee` / V1.4). Tag/rilis GitHub **belum dibuat**.
+- Perubahan sudah **di-commit** sebagai `ced6e85` (+ `96e61ba` untuk koreksi
+  status dokumen ini) dan **di-push** ke `origin/master`
+  (`github.com/Davidzinco/saku`) pada 2026-11-21; remote kini di **`96e61ba`**
+  (sebelumnya `a0113ee` / V1.4). Rilis **`v1.5`** kemudian dibuat pada
+  2026-11-23 (asset `Saku-V1.5-LiquidGlass.apk`) saat semua APK dipindahkan
+  keluar dari repository ke GitHub Releases; rilis terbaru saat ini adalah
+  **`v1.6`**.
 
 V1.4 (bug fix and add new feature)
 1. untuk slide chart itu kadang transaksi tidak terload, ngelag atau tidak optimal dan hilangkan slider pada bawah chart.

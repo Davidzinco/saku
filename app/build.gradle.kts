@@ -15,9 +15,9 @@ android {
         minSdk = 26
         targetSdk = 37
         // V1.5 #8: versi dibaca PackageManager untuk ditampilkan di Setting.
-        // versionCode naik 1 -> 5 agar pemasangan di atas V1.4 dianggap upgrade.
-        versionCode = 5
-        versionName = "1.5"
+        // Satu versi = satu versionCode: 1.4 -> 5, V1.6 -> 6.
+        versionCode = 6
+        versionName = "1.6"
     }
 
     buildFeatures { compose = true }

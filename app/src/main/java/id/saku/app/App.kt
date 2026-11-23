@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.kyant.backdrop.Backdrop
 import kotlin.coroutines.cancellation.CancellationException
@@ -483,6 +484,19 @@ fun SakuApp() {
  * V1.3: sistem geser dipertahankan, tapi halaman baru dibuka SETELAH jari dilepas.
  * Saat `glass` aktif, permukaannya memakai resep liquid glass dari
  * Kyant0/AndroidLiquidGlass (vibrancy + blur + lens), dengan warna tetap dari [Tok].
+ *
+ * V1.6 #1 — geometri & perilaku diambil dari `LiquidGlassApp/LiquidBottomTabs.kt`:
+ * kontainer kapsul 64dp + inset 4dp, baris isi 56dp, ikon 22dp, label 11sp,
+ * dan kapsul indikator selebar slot yang **menggelinding** ke tab aktif.
+ * Pembesaran bukan lagi milik satu tab yang sedang aktif (V1.5), melainkan
+ * `pressProgress`: seluruh dock membesar `1 + 16dp/lebar`, semua isi tab
+ * membesar 1.0 -> 1.2, dan pill indikator membesar sampai memenuhi tinggi dock
+ * (64/56) dengan sedikit squash/stretch mengikuti kecepatan geser — persis
+ * seperti `DampedDragAnimation.pressProgress` di proyek acuan.
+ *
+ * Semua state animasi dibaca di dalam lambda `graphicsLayer`, jadi per frame
+ * hanya invalidate fase gambar. Jumlah state animasi juga turun: satu
+ * `Animatable` bersama menggantikan empat `animateFloatAsState` per tab.
  */
 @Composable
 fun Dock(
@@ -500,23 +514,30 @@ fun Dock(
     // Posisi wash saat jari menahan, disimpan sebagai state biasa. AwaitPointerEventScope
     // adalah restricted suspension scope, jadi Animatable.snapTo() tidak boleh dipanggil
     // langsung dari dalam pointerInput.
-    var dragX by remember { mutableStateOf(0f) }
-    // V1.4 #4: selama jari menahan, dock membesar sedikit lalu kembali saat lepas.
+    var dragX by remember { mutableFloatStateOf(0f) }
+    // V1.6 #1: satu progress tekan bersama (0..1), dipakai dock, pill, dan isi tab.
     var pressed by remember { mutableStateOf(false) }
-    val grow by animateFloatAsState(
-        targetValue = if (pressed) 1.045f else 1f,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 420f),
-        label = "dockHold"
-    )
+    val press = remember { Animatable(0f) }
+    LaunchedEffect(pressed) {
+        press.animateTo(
+            if (pressed) 1f else 0f,
+            spring(dampingRatio = 1f, stiffness = 300f)
+        )
+    }
+    // Kecepatan geser untuk squash/stretch pill (data acuan: velocity / 10,
+    // dijepit +-0.2). State biasa karena pointerInput adalah restricted suspension.
+    var dragVelocity by remember { mutableFloatStateOf(0f) }
     val shape = dockShape()
 
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
-            .height(66.dp)
+            .height(64.dp)
             .graphicsLayer {
-                scaleX = grow
-                scaleY = grow
+                // LiquidBottomTabs: lerp(1, 1 + 16dp/lebar, pressProgress).
+                val s = 1f + (16.dp.toPx() / size.width) * press.value
+                scaleX = s
+                scaleY = s
             }
             .then(
                 if (glass) {
@@ -563,15 +584,23 @@ fun Dock(
             Box(
                 Modifier
                     .offset { IntOffset(shownX.roundToInt(), 0) }
-                    .padding(horizontal = 8.dp)
-                    .width(slot - 16.dp)
-                    .height(44.dp)
-                    // V1.5 #1: kapsul tab aktif sedikit lebih besar, mengikuti
-                    // perilaku indikator di LiquidGlassApp. Transform murni,
-                    // tidak mengubah ukuran layout maupun posisi slot.
+                    // V1.6 #1 — data LiquidBottomTabs: inset 4dp, pill 56dp
+                    // selebar satu slot, bukan kapsul kecil 44dp seperti V1.5.
+                    .padding(horizontal = 4.dp)
+                    .width(slot - 8.dp)
+                    .height(56.dp)
+                    // Saat ditekan pill membesar sampai memenuhi tinggi dock 64dp
+                    // (faktor 64/56), dengan squash/stretch mengikuti kecepatan
+                    // geser seperti `layerBlock` di komponen acuan.
                     .graphicsLayer {
-                        scaleX = 1.035f
-                        scaleY = 1.035f
+                        val p = press.value
+                        val base = 1f + (64f / 56f - 1f) * p
+                        val v = (dragVelocity / 24f).coerceIn(-0.18f, 0.18f)
+                        // Jangan sampai pill melebar melewati satu slot (penting
+                        // pada layar lebar: slot membesar, rasio 64/56 tidak).
+                        val maxSx = slotPx / (slotPx - 8.dp.toPx())
+                        scaleX = (base / (1f - v * 0.75f)).coerceAtMost(maxSx)
+                        scaleY = base * (1f - v * 0.25f)
                     }
                     .then(
                         if (glass) {
@@ -585,35 +614,38 @@ fun Dock(
             )
         }
 
-        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+        // Data acuan: kontainer 64dp dipangkas 4dp -> baris isi 56dp.
+        Row(
+            Modifier.fillMaxSize().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Tab.entries.forEachIndexed { i, item ->
                 if (i == 2) Spacer(Modifier.width(58.dp))
                 val active = item == current
-                // V1.5 #1 — tab yang terselect membesar SELURUHNYA (ikon + label),
-                // bukan cuma wash di belakangnya. State animasi dibaca di dalam
-                // lambda graphicsLayer, jadi per frame hanya invalidate fase
-                // gambar — tidak ada recomposition Dock tiap frame.
-                val tabScale by animateFloatAsState(
-                    targetValue = if (active) 1.14f else 1f,
-                    animationSpec = spring(dampingRatio = 0.72f, stiffness = 420f),
-                    label = "tabScale_" + item.name
-                )
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
                         .graphicsLayer {
-                            scaleX = tabScale
-                            scaleY = tabScale
+                            // LocalLiquidBottomTabScale di acuan: lerp(1, 1.2,
+                            // pressProgress) berlaku untuk SEMUA tab, bukan cuma
+                            // tab aktif. Saku menambah penekanan 1.06x pada tab
+                            // aktif supaya permintaan V1.5 #1 tetap terasa.
+                            val s = (1f + 0.2f * press.value) * if (active) 1.06f else 1f
+                            scaleX = s
+                            scaleY = s
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Glyph(item.icon, if (active) t.accent else t.faint, if (active) 21.dp else 20.dp)
-                    Spacer(Modifier.height(5.dp))
+                    Glyph(item.icon, if (active) t.accent else t.faint, 22.dp)
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         item.label,
-                        Type.tab.copy(fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium),
+                        Type.tab.copy(
+                            fontSize = 11.sp,
+                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium
+                        ),
                         if (active) t.accent else t.muted2
                     )
                 }
@@ -633,6 +665,7 @@ fun Dock(
                             var acc = 0f
                             var lastX = down.position.x
                             dragX = wash.value
+                            dragVelocity = 0f
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
@@ -649,6 +682,8 @@ fun Dock(
                                     // Wash mengikuti jari lewat state; halaman TIDAK dibuka
                                     // selama jari masih menahan (V1.3 #2).
                                     dragX = (dragX + dx).coerceIn(0f, startOf(3))
+                                    // EMA kecepatan untuk squash/stretch pill (V1.6 #1).
+                                    dragVelocity = dragVelocity * 0.7f + dx * 0.3f
                                 }
                             }
                             if (moved) {
@@ -667,6 +702,7 @@ fun Dock(
                             }
                         } finally {
                             pressed = false
+                            dragVelocity = 0f
                         }
                     }
                 }

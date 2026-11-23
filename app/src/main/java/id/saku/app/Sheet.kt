@@ -1,9 +1,11 @@
 package id.saku.app
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,25 +21,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
- * Sheet catat/ubah transaksi: nominal berformat, Date, Time (grid chip + preset),
- * foto pada note, dan hapus dua ketuk. Urutan field mengikuti DESIGN.md.
+ * Sheet catat/ubah transaksi: nominal berformat, Date, Time (dial radial +
+ * preset), foto pada note, dan hapus dua ketuk. Urutan field mengikuti DESIGN.md.
  */
 @Composable
 fun TxSheet(
@@ -233,8 +245,8 @@ fun TxSheet(
 
         Spacer(Modifier.height(16.dp))
 
-        // V1.4 #2 — Time Input sesuai design/time.webp: field ringkas berikon jam,
-        // clear-time, dan popover tiga kolom (jam / menit / AM-PM) dengan interval.
+        // V1.6 #2 — Time Input: field ringkas berikon jam + dial radial dua
+        // langkah, mengikuti semangat ringkas `design/time.webp`.
         TimeInput(
             t = t,
             hour = hour,
@@ -429,16 +441,20 @@ fun CalendarBox(t: Tok, selected: String, onPick: (String) -> Unit) {
 }
 
 /**
- * V1.5 #2 — Time Input lebih minimalis, nyaman, dan tetap mengikuti grammar
- * `design/time.webp` (field berikon jam + popover ber-interval + preset).
+ * V1.6 #2 — Time Input: satu dial radial, dua langkah (jam -> menit), preset.
  *
- * Bedanya dari V1.4: tidak ada lagi tiga kolom yang harus digulir di dalam
- * sheet yang juga menggulir. Jam (8 kolom) dan menit (6 kolom) tampil semua
- * sebagai chip statis, jadi satu ketuk langsung memilih nilai tanpa scroll,
- * tanpa LazyColumn bersarang, dan tanpa auto-scroll yang menarik posisi daftar.
- * Field-nya satu target ketuk penuh, tombol clear pindah ke "Sekarang" di
- * kepala popover, dan angka jam memakai ukuran lebih besar supaya mudah dibaca.
- * Tidak ada keyboard, jadi inset IME tidak pernah mengangkat sheet.
+ * Teori yang dipakai:
+ * - Hick: hanya 12 pilihan tampil per langkah, bukan 36 chip sekaligus (V1.5).
+ * - Fitts: target radial ~44dp, jarak antar pusat sel >= lebar sel, dan semua
+ *   target berkumpul dekat ibu jari, bukan tersebar di pojok-pojok layar.
+ * - Recognition over recall: posisi jam memakai model jam analog yang sudah
+ *   dikenal; menit memakai kelipatan 5 pada posisi jarum yang sama.
+ * - Progressive disclosure: ketuk jam -> lanjut ke menit; ketuk menit ->
+ *   selesai dan popover tutup. Waktu penuh cukup dua ketuk.
+ * - Fine tuning: +/- 1 pada segmen aktif menjaga jam ganjil dan menit tepat,
+ *   jadi presisi V1.5 tidak hilang.
+ * - Tidak ada keyboard/IME, tidak ada LazyColumn/scroll bersarang, tidak ada
+ *   auto-scroll. Tinggi popover tetap saat segmen berganti.
  */
 @Composable
 private fun TimeInput(
@@ -450,17 +466,19 @@ private fun TimeInput(
 ) {
     var expanded by remember { mutableStateOf(false) }
     var use12 by remember { mutableStateOf(false) }
+    // 0 = jam, 1 = menit. Popover selalu dibuka dari langkah jam.
+    var step by remember { mutableIntStateOf(0) }
+
     val h12 = if (hour % 12 == 0) 12 else hour % 12
     val isAm = hour < 12
     val shown = if (use12) {
-        pad2(h12) + ":" + pad2(minute)
+        pad2(h12) + ":" + pad2(minute) + if (isAm) " AM" else " PM"
     } else {
         pad2(hour) + ":" + pad2(minute)
     }
 
     Text("Time", Type.label, t.muted2)
     Spacer(Modifier.height(6.dp))
-    // Satu target ketuk selebar field — lebih nyaman daripada tiga target kecil.
     Row(
         Modifier
             .fillMaxWidth()
@@ -472,38 +490,46 @@ private fun TimeInput(
                 RoundedCornerShape(12.dp)
             )
             .background(t.bg)
-            .pressable(scale = 0.99f, alpha = 0.96f) { expanded = !expanded }
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Glyph(Ic.Clock, if (expanded) t.accent else t.muted2, 18.dp)
-        Spacer(Modifier.width(11.dp))
-        Text(
-            shown,
-            Type.title.copy(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
-            t.ink,
-            Modifier.weight(1f)
-        )
-        if (use12) {
+        // Area ketuk utama selebar mungkin; format dipisah supaya tidak ada
+        // clickable bersarang yang bisa memicu dua aksi sekaligus.
+        Row(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .pressable(scale = 0.99f, alpha = 0.96f) {
+                    expanded = !expanded
+                    if (expanded) step = 0
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Glyph(Ic.Clock, if (expanded) t.accent else t.muted2, 18.dp)
+            Spacer(Modifier.width(11.dp))
             Text(
-                if (isAm) "AM" else "PM",
-                Type.micro.copy(fontWeight = FontWeight.SemiBold),
-                t.accent,
-                Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(t.accentWash)
-                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                shown,
+                Type.title.copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+                t.ink,
+                Modifier.weight(1f)
             )
-            Spacer(Modifier.width(8.dp))
+            Glyph(if (expanded) Ic.Up else Ic.Down, t.faint, 14.dp)
         }
-        Glyph(if (expanded) Ic.Up else Ic.Down, t.faint, 14.dp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            if (use12) "12j" else "24j",
+            Type.micro.copy(fontWeight = FontWeight.SemiBold),
+            t.accent,
+            Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(t.accentWash)
+                .tap { use12 = !use12 }
+                .padding(horizontal = 7.dp, vertical = 4.dp)
+        )
     }
 
     if (!expanded) return
 
-    // Daftar statis: tidak ada LazyColumn / scroll bersarang di dalam sheet.
-    val hourValues = remember(use12) { if (use12) (1..12).toList() else (0..23).toList() }
-    val minuteValues = remember(minute) { (minuteIntervals + minute).distinct().sorted() }
     Spacer(Modifier.height(8.dp))
     Column(
         Modifier
@@ -513,83 +539,79 @@ private fun TimeInput(
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Format", Type.micro, t.muted2, Modifier.weight(1f))
-            listOf(false, true).forEach { is12 ->
-                val on = use12 == is12
-                Text(
-                    if (is12) "12j" else "24j",
-                    Type.micro.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium),
-                    if (on) t.accent else t.muted,
-                    Modifier
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(if (on) t.accentWash else Color.Transparent)
-                        .tap { use12 = is12 }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                )
+            FineButton(t, Ic.Minus) {
+                if (step == 0) onTime((hour + 23) % 24, minute)
+                else onTime(hour, (minute + 59) % 60)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
+            TimeSegment(t, pad2(if (use12) h12 else hour), step == 0) { step = 0 }
+            Text(":", Type.title.copy(fontSize = 22.sp), t.muted2)
+            TimeSegment(t, pad2(minute), step == 1) { step = 1 }
+            Spacer(Modifier.width(6.dp))
+            FineButton(t, Ic.Plus) {
+                if (step == 0) onTime((hour + 1) % 24, minute)
+                else onTime(hour, (minute + 1) % 60)
+            }
+            Spacer(Modifier.weight(1f))
             Text(
                 "Sekarang",
                 Type.micro.copy(fontWeight = FontWeight.SemiBold),
                 t.accent,
-                Modifier.tap(onClear)
+                Modifier.tap {
+                    onClear()
+                    expanded = false
+                }
             )
         }
 
-        Spacer(Modifier.height(10.dp))
-        Text("Jam", Type.micro, t.muted2)
-        Spacer(Modifier.height(5.dp))
-        TimeGrid(
-            t = t,
-            rows = hourValues.chunked(8),
-            selected = if (use12) h12 else hour,
-            display = { pad2(it) }
-        ) { v ->
-            val h = if (!use12) v else {
-                val base = if (v == 12) 0 else v
-                if (isAm) base else base + 12
+        Spacer(Modifier.height(6.dp))
+        Text(if (step == 0) "Jam" else "Menit", Type.micro, t.muted2)
+        Spacer(Modifier.height(2.dp))
+
+        val labels: List<String>
+        val selected: Int
+        if (step == 0) {
+            labels = if (use12) {
+                (0..11).map { if (it == 0) "12" else it.toString() }
+            } else {
+                (0..11).map { pad2(it * 2) }
             }
-            onTime(h.coerceIn(0, 23), minute)
+            selected = if (use12) h12 % 12 else (hour / 2).coerceIn(0, 11)
+        } else {
+            labels = (0..11).map { pad2(it * 5) }
+            selected = (minute / 5).coerceIn(0, 11)
         }
 
-        Spacer(Modifier.height(10.dp))
-        Text("Menit", Type.micro, t.muted2)
-        Spacer(Modifier.height(5.dp))
-        TimeGrid(
+        val centerLabel = if (use12 && step == 0) (if (isAm) "AM" else "PM") else null
+        TimeDial(
             t = t,
-            rows = minuteValues.chunked(6),
-            selected = minute,
-            display = { pad2(it) }
-        ) { onTime(hour, it) }
-
-        if (use12) {
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(true, false).forEach { am ->
-                    val on = isAm == am
-                    TimeChip(
-                        t = t,
-                        label = if (am) "AM" else "PM",
-                        selected = on,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        val h = if (am) hour % 12 else (hour % 12) + 12
-                        onTime(h.coerceIn(0, 23), minute)
-                    }
+            labels = labels,
+            selected = selected,
+            centerLabel = centerLabel,
+            onCenterClick = if (centerLabel != null) {
+                { onTime((hour + 12) % 24, minute) }
+            } else null
+        ) { i ->
+            if (step == 0) {
+                val h = if (use12) {
+                    val base = if (i == 0) 12 else i
+                    val half = if (base == 12) 0 else base
+                    if (isAm) half else half + 12
+                } else {
+                    i * 2
                 }
+                onTime(h.coerceIn(0, 23), minute)
+                step = 1
+            } else {
+                onTime(hour, i * 5)
+                expanded = false
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(8, 12, 17, 20).forEach { h ->
-                val on = hour == h && minute == 0
-                TimeChip(
-                    t = t,
-                    label = dayPart(h),
-                    selected = on,
-                    modifier = Modifier.weight(1f)
-                ) {
+                TimePreset(t, dayPart(h), Modifier.weight(1f)) {
                     onTime(h, 0)
                     expanded = false
                 }
@@ -598,57 +620,152 @@ private fun TimeInput(
     }
 }
 
-private val minuteIntervals: List<Int> = (0..55 step 5).toList()
-
-/** Grid chip statis. Sengaja memakai `tap`, bukan `pressable`, karena ada
- *  hingga 36 chip: 36 InteractionSource + animasi ganda itu sia-sia. */
+/** Segmen jam/menit: target 58x44dp, segmen aktif disorot aksen. */
 @Composable
-private fun TimeGrid(
-    t: Tok,
-    rows: List<List<Int>>,
-    selected: Int,
-    display: (Int) -> String,
-    onPick: (Int) -> Unit
-) {
-    val columns = rows.firstOrNull()?.size ?: 0
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        rows.forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                row.forEach { v ->
-                    TimeChip(
-                        t = t,
-                        label = display(v),
-                        selected = v == selected,
-                        modifier = Modifier.weight(1f)
-                    ) { onPick(v) }
-                }
-                repeat((columns - row.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimeChip(
-    t: Tok,
-    label: String,
-    selected: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
+private fun TimeSegment(t: Tok, label: String, active: Boolean, onClick: () -> Unit) {
     Box(
-        modifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) t.accent else Color.Transparent)
-            .then(if (!selected) Modifier.border(1.dp, t.hairSoft, RoundedCornerShape(8.dp)) else Modifier)
+        Modifier
+            .width(58.dp)
+            .height(44.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (active) t.accentWash else Color.Transparent)
             .tap(onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
             label,
-            Type.label.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
-            if (selected) (if (t.dark) t.bg else Color.White) else t.ink
+            Type.title.copy(fontSize = 24.sp, fontWeight = FontWeight.SemiBold),
+            if (active) t.accent else t.ink
         )
+    }
+}
+
+/** Koreksi halus +/- 1 untuk segmen yang sedang aktif. */
+@Composable
+private fun FineButton(t: Tok, ic: Ic, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(t.accentWash)
+            .tap(onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Glyph(ic, t.accent, 16.dp)
+    }
+}
+
+/** Preset satu ketuk: jalur tercepat untuk waktu yang paling sering dipakai. */
+@Composable
+private fun TimePreset(
+    t: Tok,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, t.hairSoft, RoundedCornerShape(10.dp))
+            .tap(onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, Type.label.copy(fontWeight = FontWeight.Medium), t.ink)
+    }
+}
+
+/**
+ * Dial radial 12 posisi. Jari-jari dihitung dari lebar nyata, sehingga 12 sel
+ * tidak saling tumpang tindih: jarak pusat = 2*r*sin(15deg) >= lebar sel.
+ * Semua angka digambar sekali, tanpa LazyColumn dan tanpa state animasi per sel.
+ */
+@Composable
+private fun TimeDial(
+    t: Tok,
+    labels: List<String>,
+    selected: Int,
+    centerLabel: String? = null,
+    onCenterClick: (() -> Unit)? = null,
+    onPick: (Int) -> Unit
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val dial = minOf(maxWidth, 228.dp)
+        val density = LocalDensity.current
+        val dialPx = with(density) { dial.toPx() }
+        val cell = dial * (44f / 228f)
+        val cellPx = with(density) { cell.toPx() }
+        val rPx = dialPx / 2f - cellPx / 2f - with(density) { 6.dp.toPx() }
+        val c = dialPx / 2f
+        val selAngle = (selected * 30f - 90f) * PI.toFloat() / 180f
+
+        Box(Modifier.size(dial).align(Alignment.Center)) {
+            Canvas(Modifier.size(dial)) {
+                drawCircle(
+                    color = t.hairSoft,
+                    radius = dialPx / 2f - 1.dp.toPx(),
+                    center = Offset(c, c),
+                    style = Stroke(width = 1.dp.toPx())
+                )
+                drawLine(
+                    color = t.accent.copy(alpha = 0.45f),
+                    start = Offset(c, c),
+                    end = Offset(c + rPx * cos(selAngle), c + rPx * sin(selAngle)),
+                    strokeWidth = 2.dp.toPx()
+                )
+                if (centerLabel == null) {
+                    drawCircle(t.accent, radius = 3.dp.toPx(), center = Offset(c, c))
+                }
+            }
+
+            labels.forEachIndexed { i, label ->
+                val a = (i * 30f - 90f) * PI.toFloat() / 180f
+                val x = c + rPx * cos(a)
+                val y = c + rPx * sin(a)
+                val on = i == selected
+                Box(
+                    Modifier
+                        .offset {
+                            IntOffset(
+                                (x - cellPx / 2f).roundToInt(),
+                                (y - cellPx / 2f).roundToInt()
+                            )
+                        }
+                        .size(cell)
+                        .clip(CircleShape)
+                        .background(if (on) t.accent else Color.Transparent)
+                        .tap { onPick(i) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        Type.body.copy(
+                            fontSize = if (dial >= 220.dp) 14.sp else 13.sp,
+                            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium
+                        ),
+                        if (on) (if (t.dark) t.bg else Color.White) else t.ink
+                    )
+                }
+            }
+
+            if (centerLabel != null && onCenterClick != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.Center)
+                        .width(54.dp)
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(t.accentWash)
+                        .tap(onCenterClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        centerLabel,
+                        Type.micro.copy(fontWeight = FontWeight.SemiBold),
+                        t.accent
+                    )
+                }
+            }
+        }
     }
 }
