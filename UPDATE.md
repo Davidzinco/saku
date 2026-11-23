@@ -1,14 +1,50 @@
 V1.x (upcoming)
 integrasi scan dan ai serta sync dengan aplikasi lain. persiapan penambahan menu backup to google drvie
 
-s
-V1.6.3
-1. beri saldo nya menjadi 2 bagian atau bisa di tambah manual di seting yaitu saldo cash atau e-wallet 
-2. coba tampilan pada home di rubah karena terlalu terlihat seperti terlalu minimalis dan mungkin tuntuk tampilan home sekarang beberapa bisa di pindah ke transaksi daripada di home. singkatnya kita coba rombak tampilan home karena terlalu minimalis tapi berikan opsi nya pada seting untuk menggunakan tampilan sekarang atau yang baru.
-3. berikan cara agar orang tidak lupa mencatat setiap pengeluaran. saya ada beberapa saran seperti notifikasi jika terdeteksi notif pembayaran dari aplikasi e-wallet dan itu bisa di nyalakan atau di matikan agar pengguna tidak merasa tidak nyaman dan ada saran lagi seperti tambah widget dengan sangat simple dan informatif serta mudah dalam mengisi data
-4. Optimasi aplikasi karena saya merasa aplikasi sudah mulai berat dari terlihatnya patah patah saat berganti menu atau sekedar scroll history transaksi
-5. berikan opsi hapus data total atau di bulan tertentu saja.
-6. 
+
+## V1.6.8
+
+**Prioritas utama:** mengoptimalkan performa agar transisi menu dan pengguliran
+riwayat transaksi terasa lancar serta aplikasi tetap stabil dalam berbagai kondisi.
+
+1. Menambahkan pemisahan saldo berdasarkan sumber dana: tunai dan e-wallet.
+   Pengguna dapat menggabungkan atau memisahkan saldo melalui Pengaturan, serta
+   menambah sumber dana baru. Jika tidak diperlukan, pengguna tetap dapat memilih
+   satu sumber dana tunggal.
+2. Merombak tampilan beranda agar tidak terlalu minimalis. Beberapa informasi
+   dapat dipindahkan ke halaman Transaksi. Tambahkan opsi Pengaturan untuk
+   memilih tampilan beranda lama atau tampilan baru.
+3. Menyediakan pengingat pencatatan pengeluaran, misalnya dengan fitur:
+   - mendeteksi notifikasi pembayaran dari aplikasi e-wallet dan menawarkan
+     pencatatan transaksi;
+   - mengaktifkan atau menonaktifkan deteksi notifikasi melalui Pengaturan;
+   - menambah widget sederhana yang menampilkan informasi penting dan memungkinkan
+     pengisian transaksi dengan cepat.
+4. Mengurangi beban dan jeda saat berpindah menu atau menggulir riwayat
+   transaksi agar aplikasi tetap lancar dan stabil.
+5. Menambahkan opsi penghapusan data, baik untuk seluruh aplikasi maupun hanya
+   untuk bulan tertentu.
+6. Menambahkan layar sambutan dan alur pengaturan awal saat aplikasi pertama kali
+   dibuka setelah instalasi.
+7. Merapikan halaman Pengaturan: susun ulang urutan, kategori, dan alur pilihan.
+   Perluas jumlah serta kemudahan pemilihan tema.
+8. Memperbaiki pemilihan waktu:
+   - pada format 24 jam, tampilkan pilihan angka **1–24**, bukan kelipatan dua;
+   - pindahkan penanda **AM/PM** pada format 12 jam agar lebih mudah terlihat.
+9. Menambahkan ikon mata pada beranda untuk menyembunyikan atau menampilkan total
+   uang.
+10. Memperjelas tampilan saldo pada halaman Transaksi. Total saldo ditampilkan
+    lebih besar, mengecil saat halaman digulir, dan tetap mengikuti posisi gulir.
+    Jelajahi desain kartu/gimmick yang menarik untuk menampilkan total saldo,
+    pengeluaran, grafik, aset 3D, atau elemen visual kreatif lainnya.
+11. Menambahkan opsi saldo beku: saldo yang dapat ditambah tetapi tidak mudah
+    dikurangi, misalnya untuk dana investasi atau tabungan khusus. Rancangan
+    detail alur dan batasan penggunaannya dipindahkan ke rencana V1.7 jika
+    implementasinya memerlukan perancangan lebih lanjut.
+12. Merancang ulang UI pada halaman Tabungan.
+13. Memperbarui folder desain agar mengikuti desain antarmuka versi aplikasi saat
+    ini.
+
 
 V1.6 (small update)
 1. bootom menu nya belum sesuai, saran saya ambil data dari applikasi "C:\Users\Davidzinco\WorkBuddy AI\2026-11-17-12-42-19\LiquidGlassApp"
